@@ -10,6 +10,8 @@ Ao contrário de planilhas complexas, este gerenciador possui um motor financeir
 
 ## 📸 Telas do Aplicativo
 
+Dados fictícios:
+
 <img width="1052" height="682" alt="tela_inicial" src="https://github.com/user-attachments/assets/95107336-9fa7-42fc-8f23-941c4094f063" />
 
 <img width="1052" height="682" alt="tela_aplicacoes" src="https://github.com/user-attachments/assets/0afc5085-fa94-4ed5-9fba-f810a019235d" />
