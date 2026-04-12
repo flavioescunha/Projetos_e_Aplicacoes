@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.7"  # Correção da Adição de Movimento na Aplicação, clique duplo na data do picker.
+VERSAO_ATUAL = "v1.0.7"  # Correção da Adição de Movimento na Aplicação, atualização negativa do saldo, clique duplo na data do picker.
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -314,7 +314,21 @@ class AppInvest(ctk.CTk):
             # Cria a janelinha popup
             top = ctk.CTkToplevel(frame_pai)
             top.title("Calendário")
-            top.geometry("260x260")
+            
+            # --- POSICIONAMENTO DINÂMICO ---
+            # Pega as coordenadas X e Y do botão na tela do computador
+            x_botao = btn_calendario.winfo_rootx()
+            y_botao = btn_calendario.winfo_rooty()
+            largura_botao = btn_calendario.winfo_width()
+            
+            # Calcula a posição: X (direita do botão + 5 pixels de espaço) e Y (mesma altura)
+            pos_x = x_botao + largura_botao + 5
+            pos_y = y_botao
+            
+            # Define o tamanho E a posição da janela (formato: "LarguraxAltura+X+Y")
+            top.geometry(f"260x260+{pos_x}+{pos_y}")
+            # -------------------------------
+            
             top.attributes("-topmost", True) # Mantém por cima
             top.grab_set() # Foca a atenção nela
             
@@ -333,7 +347,12 @@ class AppInvest(ctk.CTk):
             # Mantemos o botão como alternativa caso o usuário prefira clicar
             ctk.CTkButton(top, text="Confirmar", command=confirmar_data).pack(pady=5)
 
-        return ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
+        # Em vez de retornar direto, salvamos o botão em uma variável.
+        # Assim a função abrir_calendario (ali em cima) consegue consultar a posição dele!
+        btn_calendario = ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
+        
+        return btn_calendario
+    
     
     def converter_moeda_para_float(self, valor_str):
         """Limpa R$, espaços e formatação para converter com segurança."""
@@ -814,9 +833,31 @@ class AppInvest(ctk.CTk):
                 
             objetivos_ativos = [obj for obj in objetivos_ativos if obj["falta_calculo"] > 0]
 
-        # 5. Aplicar os novos saldos e salvar
+        # 5. Aplicar os novos saldos e salvar o histórico
+        from datetime import datetime
+        data_atual = datetime.now().strftime("%d/%m/%Y")
+
         for obj in objetivos_calc:
-            self.dados["objetivos"][obj["nome"]]["saldo"] = obj["novo_saldo"]
+            nome_obj = obj["nome"]
+            novo_saldo = obj["novo_saldo"]
+            
+            alvo = self.dados["objetivos"][nome_obj]
+            saldo_antigo = alvo.get("saldo", 0.0)
+            
+            # Garante que a lista de movimentos existe no dicionário do objetivo
+            if "movimentos" not in alvo:
+                alvo["movimentos"] = []
+            
+            # Lança o débito (Zera o objetivo no histórico)
+            if saldo_antigo > 0:
+                alvo["movimentos"].append((data_atual, "Saída (Redistribuição)", -saldo_antigo, 0.0))
+                
+            # Lança o crédito (Injeta o novo valor calculado no histórico)
+            if novo_saldo > 0:
+                alvo["movimentos"].append((data_atual, "Entrada (Redistribuição)", novo_saldo, novo_saldo))
+                
+            # Atualiza o saldo oficial
+            alvo["saldo"] = novo_saldo
             
         self.salvar_dados()
         self.atualizar_tabelas_principais()
@@ -1464,9 +1505,17 @@ class AppInvest(ctk.CTk):
             self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float))
             self.salvar_dados()
             
-            # Formata montante atualizado para a tabela
-            saldo_atualizado = self.dados["objetivos"][nome]["saldo"]
-            tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
+            # Formata montante atualizado para a tabela (Saldo Aplicado + Total de Ativos)
+            saldo_aplicado = self.dados["objetivos"][nome]["saldo"]
+            montante_total = saldo_aplicado + valor_ativo_float 
+            
+            tree_movs.insert("", "end", values=(
+                data, 
+                tipo, 
+                self.formatar_moeda(valor_exibicao), 
+                self.formatar_moeda(valor_ativo_float), 
+                self.formatar_moeda(montante_total) # Agora mostra a soma!
+            ))
             self.atualizar_tabelas_principais()
 
             ent_data.delete(0, 'end')
@@ -1519,16 +1568,24 @@ class AppInvest(ctk.CTk):
         btn_remover_mov = ctk.CTkButton(janela, text="Remover Movimento Selecionado", fg_color="#C0392B", command=remover_movimento)
         btn_remover_mov.pack(pady=5)
 
-        # Preenche a tabela calculando o montante em tempo real no histórico
+       # Preenche a tabela calculando o montante em tempo real no histórico
         if nome_preenchido in self.dados["objetivos"]:
             saldo_acumulado = 0.0
             for mov in self.dados["objetivos"][nome_preenchido].get("movimentos", []):
-                saldo_acumulado += mov[2]
-                val_lancado = self.formatar_moeda(mov[2])
-                val_ativo = self.formatar_moeda(mov[3]) if len(mov) > 3 else "-" 
-                val_montante = self.formatar_moeda(saldo_acumulado)
-                tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo, val_montante))
+                saldo_acumulado += mov[2] # Acumula o saldo de aportes/resgates (mov[2])
+                
+                # Pega o valor do ativo registrado naquele dia específico
+                valor_ativo_historico = mov[3] if len(mov) > 3 else 0.0 
+                
+                # O Montante Total é a soma do dinheiro acumulado + o valor dos ativos da época
+                montante_total = saldo_acumulado + valor_ativo_historico
 
+                val_lancado = self.formatar_moeda(mov[2])
+                val_ativo_formatado = self.formatar_moeda(valor_ativo_historico) if len(mov) > 3 else "-" 
+                val_montante = self.formatar_moeda(montante_total) # Agora mostra a soma!
+                
+                tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo_formatado, val_montante))
+                
         def salvar_tudo_e_fechar():
             try:
                 atualizar_dict_objetivo()
