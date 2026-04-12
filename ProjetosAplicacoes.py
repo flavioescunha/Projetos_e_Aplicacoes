@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.5"  # Lembre-se de mudar isso quando lançar uma nova!
+VERSAO_ATUAL = "v1.0.7"  # Correção da Adição de Movimento na Aplicação, clique duplo na data do picker.
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -270,27 +270,41 @@ class AppInvest(ctk.CTk):
 
     def configurar_entrada_moeda(self, entry_widget):
         """Formata a entrada da direita para a esquerda (Estilo Caixa Eletrônico)."""
+        
+        # 1. Verifica se já existe uma variável de controle. Se não, cria uma e atrela ao Entry.
+        # O argumento "value" garante que não vamos apagar um texto que já esteja lá.
+        var_controle = entry_widget.cget("textvariable")
+        if not var_controle:
+            var_controle = ctk.StringVar(value=entry_widget.get())
+            entry_widget.configure(textvariable=var_controle)
+
         def formatar_moeda_evento(event):
+            # Ignora as setas e o Tab
             if event.keysym in ['Left', 'Right', 'Up', 'Down', 'Tab']: return
             
-            texto_atual = entry_widget.get()
+            # 2. LÊ diretamente da variável segura, e não do widget cru
+            texto_atual = var_controle.get()
             numeros = ''.join(filter(str.isdigit, texto_atual))
             
             if not numeros:
-                entry_widget.delete(0, 'end')
+                var_controle.set("")
                 return
             
-            # Divide por 100 para criar os centavos (Ex: "123" vira 1.23)
+            # Divide por 100 para criar os centavos
             valor = float(numeros) / 100
             
-            # Formata no estilo brasileiro 1.234.567,89
+            # Formata no estilo brasileiro
             valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             
-            entry_widget.delete(0, 'end')
-            entry_widget.insert(0, valor_formatado)
+            # 3. ESCREVE diretamente na variável (isso elimina o bug do CTkEntry.get() retornar vazio)
+            var_controle.set(valor_formatado)
+            
+            # 4. Força o cursor de digitação a ir para o final do texto
+            entry_widget.after(10, lambda: entry_widget.icursor('end'))
             
         entry_widget.bind("<KeyRelease>", formatar_moeda_evento)
 
+        
     def criar_datepicker(self, frame_pai, entry_alvo):
         """Cria um botão com ícone de calendário que preenche o Entry alvo."""
         from tkcalendar import Calendar
@@ -307,20 +321,35 @@ class AppInvest(ctk.CTk):
             cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy')
             cal.pack(pady=10, padx=10, fill="both", expand=True)
             
-            def confirmar_data():
+            # 1. Adicionamos event=None para que a função aceite tanto o botão quanto o clique do mouse
+            def confirmar_data(event=None):
                 entry_alvo.delete(0, 'end')
                 entry_alvo.insert(0, cal.get_date())
                 top.destroy()
                 
+            # 2. Vincula o evento de duplo clique esquerdo (<Double-1>) diretamente no calendário
+            cal.bind("<Double-1>", confirmar_data)
+            
+            # Mantemos o botão como alternativa caso o usuário prefira clicar
             ctk.CTkButton(top, text="Confirmar", command=confirmar_data).pack(pady=5)
 
         return ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
-
+    
     def converter_moeda_para_float(self, valor_str):
-        """Remove os pontos de milhar e troca a vírgula para converter com segurança."""
+        """Limpa R$, espaços e formatação para converter com segurança."""
         if not valor_str: return 0.0
-        # Remove os pontos e troca a vírgula por ponto. Ex: "1.234,56" -> "1234.56"
-        limpo = valor_str.replace(".", "").replace(",", ".")
+        
+        # 1. Remove "R$", espaços e qualquer caractere que não seja número, vírgula ou ponto
+        import re
+        limpo = re.sub(r'[^\d,\.-]', '', valor_str)
+        
+        # 2. Se o campo tiver pontos de milhar (1.234,56), remove o ponto
+        if "." in limpo and "," in limpo:
+            limpo = limpo.replace(".", "")
+        
+        # 3. Transforma a vírgula decimal em ponto para o float() entender
+        limpo = limpo.replace(",", ".")
+        
         try:
             return float(limpo)
         except ValueError:
@@ -1162,6 +1191,7 @@ class AppInvest(ctk.CTk):
             texto_atual = entry_widget.get()
             numeros = ''.join(filter(str.isdigit, texto_atual))
             
+            
             if not numeros:
                 entry_widget.delete(0, 'end')
                 return
@@ -1617,32 +1647,89 @@ class AppInvest(ctk.CTk):
         ent_saldo.bind("<FocusOut>", on_saldo_focusout)
 
         def adicionar_movimento():
+
+            # --- CORREÇÃO DO CONFLITO DE TEMPO ---
+            # 1. Tira forçadamente o foco de digitação do campo, garantindo que o <FocusOut> seja disparado
+            janela.focus_set()
+            
+            # 2. Manda o Tkinter processar a fila de eventos e rodar a matemática do FocusOut ANTES de continuar
+            janela.update() 
+            # ------------------------------------
+
             nome = ent_nome.get().strip()
             data = ent_data.get().strip()
             # Converte usando o ajudante global
-            valor_float = self.converter_moeda_para_float(ent_valor.get())
+            valor_text = ent_valor.get()
+            valor_float = self.converter_moeda_para_float(valor_text)
             tipo = tipo_mov.get()
 
-            if not nome or not data or valor_float == 0: return
+            print(f"DEBUG: O que o Python está lendo: '{valor_text}'")
+            print(f"DEBUG: O que o Python está lendo: '{ent_valor.get()}'")
+
+
+            # --- VALIDAÇÃO COM FEEDBACK ---
+            if not nome:
+                messagebox.showwarning("Aviso", "Por favor, preencha o Nome da Aplicação.")
+                return
+            if not data or len(data) < 10:
+                messagebox.showwarning("Aviso", "Preencha a data corretamente (DD/MM/AAAA).")
+                return
+            if valor_float == 0:
+                messagebox.showwarning("Aviso", "O valor do movimento não pode ser zero.")
+                return
+
+            # Garante que o dicionário de aplicações existe no self.dados
+            if "aplicacoes" not in self.dados:
+                self.dados["aplicacoes"] = {}
 
             if nome not in self.dados["aplicacoes"]:
-                self.dados["aplicacoes"][nome] = {"saldo": 0.0, "tipo": combo_tipo_app.get(), "movimentos": []}
+                self.dados["aplicacoes"][nome] = {
+                    "saldo": 0.0, 
+                    "tipo": combo_tipo_app.get(), 
+                    "movimentos": []
+                }
             else:
                 self.dados["aplicacoes"][nome]["tipo"] = combo_tipo_app.get()
 
-            valor_exibicao = -valor_float if tipo == "Resgate" else valor_float
+            # --- NOVA LÓGICA DE SINAIS (SUBSTITUA A LINHA ANTIGA POR ISSO AQUI) ---
+            saldo_base = obter_saldo_base()
+            saldo_alvo = self.converter_moeda_para_float(ent_saldo.get())
 
+            if tipo == "Resgate":
+                valor_exibicao = -valor_float
+            elif tipo == "Atualização":
+                # Se o saldo final da tela for menor que o saldo que tínhamos guardado, foi uma desvalorização!
+                if saldo_alvo < saldo_base:
+                    valor_exibicao = -valor_float
+                else:
+                    valor_exibicao = valor_float
+            else: # "Aporte"
+                valor_exibicao = valor_float
+            # ----------------------------------------------------------------------
+
+            # Atualiza o saldo e gera o registro
             self.dados["aplicacoes"][nome]["saldo"] += valor_exibicao
             saldo_momento = self.dados["aplicacoes"][nome]["saldo"]
 
-            self.dados["aplicacoes"][nome]["movimentos"].append((data, tipo, valor_exibicao, saldo_momento))
+            # Salva o movimento
+            novo_movimento = (data, tipo, valor_exibicao, saldo_momento)
+            self.dados["aplicacoes"][nome]["movimentos"].append(novo_movimento)
+            
+            # Persistência e Interface
             self.salvar_dados()
             
-            tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(saldo_momento)))
+            # Insere na Treeview (Tabela)
+            tree_movs.insert("", "end", values=(
+                data, 
+                tipo, 
+                self.formatar_moeda(valor_exibicao), 
+                self.formatar_moeda(saldo_momento)
+            ))
+            
             self.atualizar_tabelas_principais()
             lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_momento)}")
 
-            ent_data.delete(0, 'end')
+            # Limpa os campos para o próximo lançamento
             ent_valor.delete(0, 'end')
             ent_saldo.delete(0, 'end')
             ent_data.focus()
