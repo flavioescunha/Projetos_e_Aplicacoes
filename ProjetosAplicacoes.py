@@ -8,11 +8,61 @@ import requests
 import calendar
 import tkinter.font as tkfont
 from datetime import datetime, timedelta
+import requests
+import webbrowser
+import threading
+
+
+
+VERSAO_ATUAL = "v1.0.5"  # Lembre-se de mudar isso quando lançar uma nova!
+USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
 ARQUIVO_JSON = "dados_investimentos.json"
+
+def verificar_atualizacoes(janela_pai=None):
+    """
+    Verifica no GitHub se há uma versão mais recente e avisa o usuário.
+    """
+    try:
+        # Acessa a API do GitHub para ver o último lançamento
+        url_api = f"https://api.github.com/repos/{USUARIO_REPO}/releases/latest"
+        resposta = requests.get(url_api, timeout=5)
+        
+        if resposta.status_code == 200:
+            dados = resposta.json()
+            versao_github = dados['tag_name']
+            
+            # Pega o link direto para a página bonita da Release
+            url_pagina_release = dados['html_url'] 
+            
+            # Compara as versões (Ex: "v1.0.3" > "v1.0.2")
+            if versao_github > VERSAO_ATUAL:
+                
+                # Monta a mensagem para o usuário
+                mensagem = (
+                    f"Uma nova atualização do Gerenciador de Investimentos está disponível!\n\n"
+                    f"Versão mais recente: {versao_github}\n"
+                    f"Sua versão atual: {VERSAO_ATUAL}\n\n"
+                    f"Deseja abrir a página de download agora?"
+                )
+                
+                # Exibe a caixa de pergunta
+                resposta_usuario = messagebox.askyesno(
+                    "Atualização Disponível 🎉", 
+                    mensagem, 
+                    parent=janela_pai
+                )
+                
+                # Se ele clicou em "Sim", abre o navegador padrão no site do GitHub
+                if resposta_usuario:
+                    webbrowser.open(url_pagina_release)
+                    
+    except Exception as e:
+        # Se o usuário estiver sem internet ou der erro, o programa apenas ignora em silêncio
+        pass
 
 class AppInvest(ctk.CTk):
     def __init__(self):
@@ -80,8 +130,202 @@ class AppInvest(ctk.CTk):
         self.setup_tabela_aplicacoes()
         
         self.tab_obj.tkraise()
-        self.atualizar_tabelas_principais()
+        self.carregar_dados_ipca()
+        #self.atualizar_tabelas_principais()
 
+        # Verifica se há atualizações silenciosamente em segundo plano
+        threading.Thread(target=lambda: verificar_atualizacoes(self), daemon=True).start()
+
+    def carregar_dados_ipca(self):
+        """
+        Verifica se existe um cache do IPCA de hoje. Se sim, carrega na memória.
+        Se não, levanta uma tela de carregamento e baixa os dados em segundo plano.
+        """
+        self.arquivo_cache_ipca = "cache_ipca.json"
+        self.dados_ipca = [] # Memória rápida para os cálculos
+        hoje_str = datetime.now().strftime("%d/%m/%Y")
+
+        # Verifica se o arquivo existe
+        if os.path.exists(self.arquivo_cache_ipca):
+            try:
+                with open(self.arquivo_cache_ipca, 'r', encoding='utf-8') as f:
+                    cache = json.load(f)
+                    # Se o cache for de hoje, usa ele e ignora a internet!
+                    if cache.get("data_atualizacao") == hoje_str:
+                        self.dados_ipca = cache.get("dados", [])
+                        self.carregar_interface_apos_ipca() # Continua a abrir o app
+                        return
+            except Exception as e:
+                print("Erro ao ler cache do IPCA, baixando novamente:", e)
+
+        # Se chegou aqui, não tem cache válido. Precisa baixar.
+        self.mostrar_tela_carregamento_ipca()
+
+    def mostrar_tela_carregamento_ipca(self):
+        """Mostra uma janela flutuante avisando que está baixando dados."""
+        # AQUI: Mudamos de self.root para self
+        self.janela_loading = ctk.CTkToplevel(self) 
+        self.janela_loading.title("Atualizando")
+        self.janela_loading.geometry("300x120")
+        self.janela_loading.attributes("-topmost", True)
+        self.janela_loading.transient(self) # AQUI TAMBÉM
+        self.janela_loading.grab_set() 
+        
+        # Centraliza a janelinha (usando self)
+        self.janela_loading.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 150
+        y = self.winfo_y() + (self.winfo_height() // 2) - 60
+        self.janela_loading.geometry(f"+{x}+{y}")
+
+        ctk.CTkLabel(self.janela_loading, text="Conectando ao Banco Central...", font=("Roboto", 14, "bold")).pack(pady=(20, 10))
+        self.barra_progresso = ctk.CTkProgressBar(self.janela_loading, mode="indeterminnate", width=200)
+        self.barra_progresso.pack()
+        self.barra_progresso.start()
+
+        # Inicia o download em uma THREAD separada
+        threading.Thread(target=self.baixar_ipca_background, daemon=True).start()
+
+    def baixar_ipca_background(self):
+        """Baixa todo o histórico do IPCA e salva no cache."""
+        try:
+            data_final_str = datetime.now().strftime("%d/%m/%Y")
+            url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial=01/01/2000&dataFinal={data_final_str}"
+            
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            dados = response.json()
+            
+            self.dados_ipca = dados
+            
+            cache = {
+                "data_atualizacao": data_final_str,
+                "dados": dados
+            }
+            with open(self.arquivo_cache_ipca, 'w', encoding='utf-8') as f:
+                json.dump(cache, f)
+                
+        except Exception as e:
+            print("Erro ao baixar IPCA:", e)
+            if os.path.exists(self.arquivo_cache_ipca):
+                with open(self.arquivo_cache_ipca, 'r', encoding='utf-8') as f:
+                    self.dados_ipca = json.load(f).get("dados", [])
+            else:
+                self.dados_ipca = []
+
+        # AQUI: Mudamos de self.root.after para self.after
+        self.after(500, self.finalizar_carregamento_ipca)
+
+
+
+    def finalizar_carregamento_ipca(self):
+        """Fecha a janela de loading e manda o programa seguir a vida."""
+        if hasattr(self, 'janela_loading') and self.janela_loading.winfo_exists():
+            self.barra_progresso.stop()
+            self.janela_loading.destroy()
+        
+        # Agora sim renderiza tabelas e gráficos
+        self.carregar_interface_apos_ipca()
+
+    def carregar_interface_apos_ipca(self):
+        """
+        Esta função é chamada automaticamente quando o IPCA estiver pronto na memória.
+        Ela avisa o programa que agora é seguro desenhar os gráficos e tabelas.
+        """
+        # Aqui você coloca as funções que antes ficavam no final do seu __init__
+        # Provavelmente a principal é esta:
+        if hasattr(self, 'atualizar_tabelas_principais'):
+            self.atualizar_tabelas_principais()
+
+
+    def configurar_entrada_data(self, entry_widget):
+        """Aplica máscara DD/MM/AAAA e corrige ano com 2 dígitos ao sair."""
+        def formatar_data_evento(event):
+            # Ignora teclas de apagar e navegação para não travar o usuário
+            if event.keysym in ['BackSpace', 'Delete', 'Left', 'Right', 'Tab']: return
+            
+            texto = entry_widget.get()
+            numeros = ''.join(filter(str.isdigit, texto))
+            
+            formatado = ""
+            if len(numeros) > 0: formatado += numeros[:2]
+            if len(numeros) > 2: formatado += "/" + numeros[2:4]
+            if len(numeros) > 4: formatado += "/" + numeros[4:8]
+            
+            entry_widget.delete(0, 'end')
+            entry_widget.insert(0, formatado)
+            
+        def corrigir_ano_evento(event):
+            texto = entry_widget.get()
+            partes = texto.split("/")
+            if len(partes) == 3 and len(partes[2]) == 2:
+                ano = int(partes[2])
+                # Se for < 50, assume anos 2000+. Se for >= 50, assume anos 1900+
+                ano_completo = 2000 + ano if ano < 50 else 1900 + ano
+                novo_texto = f"{partes[0]:0>2}/{partes[1]:0>2}/{ano_completo}"
+                entry_widget.delete(0, 'end')
+                entry_widget.insert(0, novo_texto)
+                
+        entry_widget.bind("<KeyRelease>", formatar_data_evento)
+        entry_widget.bind("<FocusOut>", corrigir_ano_evento)
+
+    def configurar_entrada_moeda(self, entry_widget):
+        """Formata a entrada da direita para a esquerda (Estilo Caixa Eletrônico)."""
+        def formatar_moeda_evento(event):
+            if event.keysym in ['Left', 'Right', 'Up', 'Down', 'Tab']: return
+            
+            texto_atual = entry_widget.get()
+            numeros = ''.join(filter(str.isdigit, texto_atual))
+            
+            if not numeros:
+                entry_widget.delete(0, 'end')
+                return
+            
+            # Divide por 100 para criar os centavos (Ex: "123" vira 1.23)
+            valor = float(numeros) / 100
+            
+            # Formata no estilo brasileiro 1.234.567,89
+            valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            entry_widget.delete(0, 'end')
+            entry_widget.insert(0, valor_formatado)
+            
+        entry_widget.bind("<KeyRelease>", formatar_moeda_evento)
+
+    def criar_datepicker(self, frame_pai, entry_alvo):
+        """Cria um botão com ícone de calendário que preenche o Entry alvo."""
+        from tkcalendar import Calendar
+        import customtkinter as ctk
+
+        def abrir_calendario():
+            # Cria a janelinha popup
+            top = ctk.CTkToplevel(frame_pai)
+            top.title("Calendário")
+            top.geometry("260x260")
+            top.attributes("-topmost", True) # Mantém por cima
+            top.grab_set() # Foca a atenção nela
+            
+            cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy')
+            cal.pack(pady=10, padx=10, fill="both", expand=True)
+            
+            def confirmar_data():
+                entry_alvo.delete(0, 'end')
+                entry_alvo.insert(0, cal.get_date())
+                top.destroy()
+                
+            ctk.CTkButton(top, text="Confirmar", command=confirmar_data).pack(pady=5)
+
+        return ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
+
+    def converter_moeda_para_float(self, valor_str):
+        """Remove os pontos de milhar e troca a vírgula para converter com segurança."""
+        if not valor_str: return 0.0
+        # Remove os pontos e troca a vírgula por ponto. Ex: "1.234,56" -> "1234.56"
+        limpo = valor_str.replace(".", "").replace(",", ".")
+        try:
+            return float(limpo)
+        except ValueError:
+            return 0.0
+        
     def abrir_config_taxa_pmt(self, recarregar=True):
         janela = self.criar_janela_secundaria("Configurar Taxa do PMT", 450, 250)
         
@@ -191,13 +435,23 @@ class AppInvest(ctk.CTk):
         Varre as aplicações, monta o fluxo de caixa consolidado e calcula a TIR.
         O primeiro movimento de cada aplicação é SEMPRE tratado como aporte.
         """
+        from datetime import datetime # Garantindo o import caso falte
+        
         fluxo_caixa = []
         saldo_total_hoje = 0.0
         hoje = datetime.now()
 
-        for app_info in self.dados.get("aplicacoes", {}).values():
-            saldo_total_hoje += app_info.get("saldo", 0.0)
+        print("\n" + "="*50)
+        print("🔍 INICIANDO LOG DETALHADO DO CÁLCULO DE TIR")
+        print("="*50)
+
+        for nome_app, app_info in self.dados.get("aplicacoes", {}).items():
+            saldo_app = app_info.get("saldo", 0.0)
+            saldo_total_hoje += saldo_app
             movimentos = app_info.get("movimentos", [])
+            
+            print(f"\n📁 Analisando Aplicação: {nome_app} | Saldo Atual: R$ {saldo_app:.2f}")
+            print(f"   Movimentos brutos encontrados: {len(movimentos)}")
             
             # 1. Extrai e converte as datas para podermos ordenar cronologicamente
             movimentos_processados = []
@@ -211,7 +465,8 @@ class AppInvest(ctk.CTk):
                         data_mov = datetime.strptime(data_str, "%d/%m/%Y")
                         movimentos_processados.append({'data': data_mov, 'desc': desc, 'valor': valor})
                     except ValueError:
-                        continue # Ignora datas inválidas
+                        print(f"   ⚠️ Erro de data ignorado: {data_str}")
+                        continue
             
             # 2. Ordena os movimentos da aplicação da data mais antiga para a mais nova
             movimentos_processados.sort(key=lambda x: x['data'])
@@ -226,34 +481,71 @@ class AppInvest(ctk.CTk):
                 # Se for o movimento de abertura (índice 0), força a ser um Aporte (-)
                 if i == 0:
                     fluxo_caixa.append((mov['data'], -valor_absoluto))
+                    print(f"   [{mov['data'].strftime('%d/%m/%Y')}] 🔹 INICIAL (Forçado -): R$ {-valor_absoluto:.2f} ({mov['desc']})")
                     continue 
                 
                 # Para os demais movimentos, segue a regra normal das palavras
                 if "aporte" in mov['desc'] or "compra" in mov['desc'] or "depósito" in mov['desc'] or "deposito" in mov['desc']:
-                    # Aporte: Dinheiro sai do bolso (Negativo)
                     fluxo_caixa.append((mov['data'], -valor_absoluto))
+                    print(f"   [{mov['data'].strftime('%d/%m/%Y')}] 📉 APORTE (-): R$ {-valor_absoluto:.2f} ({mov['desc']})")
                     
                 elif "saque" in mov['desc'] or "venda" in mov['desc'] or "resgate" in mov['desc']:
-                    # Saque: Dinheiro entra no bolso (Positivo)
                     fluxo_caixa.append((mov['data'], valor_absoluto))
+                    print(f"   [{mov['data'].strftime('%d/%m/%Y')}] 📈 RESGATE (+): R$ {valor_absoluto:.2f} ({mov['desc']})")
+                
+                else:
+                    # Registrando se o movimento não caiu em nenhuma regra
+                    print(f"   [{mov['data'].strftime('%d/%m/%Y')}] ⚪ IGNORADO (Tipo sem impacto): R$ {valor_absoluto:.2f} ({mov['desc']})")
 
-        # Adiciona o saldo atual como um grande "resgate" final na data de hoje
+        print("\n" + "-"*50)
+        print(f"💰 SALDO TOTAL HOJE (Adicionado como Resgate Final): R$ {saldo_total_hoje:.2f}")
         if saldo_total_hoje > 0:
             fluxo_caixa.append((hoje, saldo_total_hoje))
 
-        # Calcula a TIR
-        tir_anual = self.calcular_xirr(fluxo_caixa)
+        print("-"*50)
+        print("📊 FLUXO DE CAIXA CONSOLIDADO ENVIADO PARA XIRR:")
         
-        # Converte para porcentagem
-        tir_percentual = tir_anual * 100
+        tem_positivo = False
+        tem_negativo = False
+        
+        # Ordenar o fluxo de caixa consolidado antes de enviar para a matemática
+        fluxo_caixa.sort(key=lambda x: x[0])
+        
+        for data, valor in fluxo_caixa:
+            sinal = "+" if valor > 0 else ""
+            print(f"   => {data.strftime('%d/%m/%Y')}: {sinal}{valor:.2f}")
+            if valor > 0: tem_positivo = True
+            if valor < 0: tem_negativo = True
 
-           
-        return tir_percentual
+        print("-"*50)
+
+        # --- PROTEÇÃO CONTRA O NaN ---
+        if not fluxo_caixa:
+            print("❌ CÁLCULO CANCELADO: O fluxo de caixa está completamente vazio.")
+            return 0.0
+            
+        if not tem_positivo or not tem_negativo:
+            print("❌ CÁLCULO CANCELADO (Prevenção de NaN):")
+            print("   Para calcular a TIR, a fórmula exige obrigatoriamente que exista")
+            print("   pelo menos um valor negativo (Aporte) e um positivo (Saldo/Resgate).")
+            print("   O seu fluxo atual só possui valores de um único sinal.")
+            return 0.0
+
+        # Calcula a TIR
+        try:
+            tir_anual = self.calcular_xirr(fluxo_caixa)
+            tir_percentual = tir_anual * 100
+            print(f"✅ SUCESSO: TIR Anual calculada: {tir_percentual:.2f}%")
+            return tir_percentual
+            
+        except Exception as e:
+            print(f"❌ ERRO MATEMÁTICO NO XIRR: {e}")
+            return 0.0
+        
 
     def corrigir_valor_pela_inflacao(self, valor_inicial, data_inicial_str):
         """
-        Corrige um valor pelo IPCA (SGS 433) calculando pro-rata para aportes no meio do mês
-        e extrapolando datas recentes sem divulgação oficial usando a média dos últimos 12 meses.
+        Corrige pelo IPCA usando os dados locais em memória (MUITO mais rápido).
         """
         try:
             data_inicial = datetime.strptime(data_inicial_str, "%d/%m/%Y")
@@ -261,71 +553,52 @@ class AppInvest(ctk.CTk):
         except ValueError:
             return valor_inicial
 
-        # Se a data for no futuro ou hoje, não há inflação a aplicar
-        if data_inicial >= hoje:
-            return valor_inicial
-
-        # Força a busca a partir do dia 01 do mês do aporte para pegar a taxa daquele mês
-        data_busca_str = f"01/{data_inicial.strftime('%m/%Y')}"
-        data_final_str = hoje.strftime("%d/%m/%Y")
-        
-        url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados?formato=json&dataInicial={data_busca_str}&dataFinal={data_final_str}"
-        
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            dados = response.json()
-        except Exception:
-            # Em caso de erro de conexão com o BCB, retorna o valor sem correção
-            return valor_inicial
-            
-        if not dados:
+        if data_inicial >= hoje or not hasattr(self, 'dados_ipca') or not self.dados_ipca:
             return valor_inicial
 
         valor_corrigido = float(valor_inicial)
-        ultimas_taxas = [] # Guarda histórico para a projeção final
+        ultimas_taxas = []
+        
+        # Encontra o mês e ano do aporte para truncar o dia (ex: 15/03/2021 -> 01/03/2021)
+        data_base_filtro = datetime(data_inicial.year, data_inicial.month, 1)
+        ultima_data_api = None
 
-        # 1. Aplicando os meses com dados oficiais do Banco Central
-        for item in dados:
-            mes_ano = item['data'] # Formato da API é DD/MM/AAAA, sempre dia 01
-            taxa_mensal = float(item['valor']) / 100.0
-            ultimas_taxas.append(taxa_mensal)
+        # 1. Lendo da memória local filtrando as datas
+        for item in self.dados_ipca:
+            dt_mes = datetime.strptime(item['data'], "%d/%m/%Y")
             
-            dt_mes = datetime.strptime(mes_ano, "%d/%m/%Y")
-            dias_no_mes = calendar.monthrange(dt_mes.year, dt_mes.month)[1]
+            # Só pega dados a partir do mês em que o investimento começou
+            if dt_mes >= data_base_filtro:
+                taxa_mensal = float(item['valor']) / 100.0
+                ultimas_taxas.append(taxa_mensal)
+                ultima_data_api = dt_mes
+                
+                dias_no_mes = calendar.monthrange(dt_mes.year, dt_mes.month)[1]
+                fator_aplicar = 1 + taxa_mensal
 
-            fator_aplicar = 1 + taxa_mensal
+                if dt_mes.year == data_inicial.year and dt_mes.month == data_inicial.month:
+                    dias_restantes = dias_no_mes - data_inicial.day + 1
+                    if dias_restantes < dias_no_mes:
+                        fator_aplicar = (1 + taxa_mensal) ** (dias_restantes / dias_no_mes)
 
-            # É o mês de início? Calcula apenas a fração de dias desde o aporte até o fim do mês
-            if dt_mes.year == data_inicial.year and dt_mes.month == data_inicial.month:
-                dias_restantes = dias_no_mes - data_inicial.day + 1
-                if dias_restantes < dias_no_mes:
-                    fator_aplicar = (1 + taxa_mensal) ** (dias_restantes / dias_no_mes)
-
-            valor_corrigido *= fator_aplicar
+                valor_corrigido *= fator_aplicar
 
         # 2. Extrapolação (Pro-rata para os dias sem dados até 'hoje')
-        # Pega a data da última leitura da API e encontra qual foi o último dia daquele mês
-        ultima_data_api = datetime.strptime(dados[-1]['data'], "%d/%m/%Y")
-        dias_no_ultimo_mes = calendar.monthrange(ultima_data_api.year, ultima_data_api.month)[1]
-        data_fim_cobertura = ultima_data_api.replace(day=dias_no_ultimo_mes)
-        
-        # Se hoje for maior que o último dia coberto pelo BCB, precisamos projetar o resto
-        if hoje > data_fim_cobertura:
-            dias_descobertos = (hoje - data_fim_cobertura).days
+        if ultima_data_api:
+            dias_no_ultimo_mes = calendar.monthrange(ultima_data_api.year, ultima_data_api.month)[1]
+            data_fim_cobertura = ultima_data_api.replace(day=dias_no_ultimo_mes)
             
-            # Pega até os últimos 12 meses para fazer uma média (anualizada)
-            taxas_para_media = ultimas_taxas[-12:] if len(ultimas_taxas) >= 12 else ultimas_taxas
-            
-            if taxas_para_media:
-                media_mensal_projetada = sum(taxas_para_media) / len(taxas_para_media)
+            if hoje > data_fim_cobertura:
+                dias_descobertos = (hoje - data_fim_cobertura).days
+                taxas_para_media = ultimas_taxas[-12:] if len(ultimas_taxas) >= 12 else ultimas_taxas
                 
-                # Assume meses de 30 dias para a projeção matemática padrão de mercado
-                fator_extrapolado = (1 + media_mensal_projetada) ** (dias_descobertos / 30.0)
-                valor_corrigido *= fator_extrapolado
+                if taxas_para_media:
+                    media_mensal_projetada = sum(taxas_para_media) / len(taxas_para_media)
+                    fator_extrapolado = (1 + media_mensal_projetada) ** (dias_descobertos / 30.0)
+                    valor_corrigido *= fator_extrapolado
 
         return valor_corrigido
-
+    
     def calcular_meses_restantes(self, data_fim_str):
         try:
             f = "%d/%m/%Y"
@@ -850,11 +1123,411 @@ class AppInvest(ctk.CTk):
 
     # --- JANELAS DE INSERÇÃO ---
 
+    def configurar_entrada_data(self, entry_widget):
+        """Aplica máscara DD/MM/AAAA e corrige ano com 2 dígitos ao sair."""
+        def formatar_data_evento(event):
+            # Ignora teclas de apagar e navegação para não travar o usuário
+            if event.keysym in ['BackSpace', 'Delete', 'Left', 'Right', 'Tab']: return
+            
+            texto = entry_widget.get()
+            numeros = ''.join(filter(str.isdigit, texto))
+            
+            formatado = ""
+            if len(numeros) > 0: formatado += numeros[:2]
+            if len(numeros) > 2: formatado += "/" + numeros[2:4]
+            if len(numeros) > 4: formatado += "/" + numeros[4:8]
+            
+            entry_widget.delete(0, 'end')
+            entry_widget.insert(0, formatado)
+            
+        def corrigir_ano_evento(event):
+            texto = entry_widget.get()
+            partes = texto.split("/")
+            if len(partes) == 3 and len(partes[2]) == 2:
+                ano = int(partes[2])
+                # Se for < 50, assume anos 2000+. Se for >= 50, assume anos 1900+
+                ano_completo = 2000 + ano if ano < 50 else 1900 + ano
+                novo_texto = f"{partes[0]:0>2}/{partes[1]:0>2}/{ano_completo}"
+                entry_widget.delete(0, 'end')
+                entry_widget.insert(0, novo_texto)
+                
+        entry_widget.bind("<KeyRelease>", formatar_data_evento)
+        entry_widget.bind("<FocusOut>", corrigir_ano_evento)
+
+    def configurar_entrada_moeda(self, entry_widget):
+        """Formata a entrada da direita para a esquerda (Estilo Caixa Eletrônico)."""
+        def formatar_moeda_evento(event):
+            if event.keysym in ['Left', 'Right', 'Up', 'Down', 'Tab']: return
+            
+            texto_atual = entry_widget.get()
+            numeros = ''.join(filter(str.isdigit, texto_atual))
+            
+            if not numeros:
+                entry_widget.delete(0, 'end')
+                return
+            
+            # Divide por 100 para criar os centavos (Ex: "123" vira 1.23)
+            valor = float(numeros) / 100
+            
+            # Formata no estilo brasileiro 1.234.567,89
+            valor_formatado = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
+            entry_widget.delete(0, 'end')
+            entry_widget.insert(0, valor_formatado)
+            
+        entry_widget.bind("<KeyRelease>", formatar_moeda_evento)
+
+    def criar_datepicker(self, frame_pai, entry_alvo):
+        """Cria um botão com ícone de calendário que preenche o Entry alvo."""
+        from tkcalendar import Calendar
+        import customtkinter as ctk
+
+        def abrir_calendario():
+            # Cria a janelinha popup
+            top = ctk.CTkToplevel(frame_pai)
+            top.title("Calendário")
+            top.geometry("260x260")
+            top.attributes("-topmost", True) # Mantém por cima
+            top.grab_set() # Foca a atenção nela
+            
+            cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy')
+            cal.pack(pady=10, padx=10, fill="both", expand=True)
+            
+            def confirmar_data():
+                entry_alvo.delete(0, 'end')
+                entry_alvo.insert(0, cal.get_date())
+                top.destroy()
+                
+            ctk.CTkButton(top, text="Confirmar", command=confirmar_data).pack(pady=5)
+
+        return ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
+
+    def converter_moeda_para_float(self, valor_str):
+        """Remove os pontos de milhar e troca a vírgula para converter com segurança."""
+        if not valor_str: return 0.0
+        # Remove os pontos e troca a vírgula por ponto. Ex: "1.234,56" -> "1234.56"
+        limpo = valor_str.replace(".", "").replace(",", ".")
+        try:
+            return float(limpo)
+        except ValueError:
+            return 0.0
+        
+    def abrir_janela_objetivo(self, nome_preenchido=""):
+        # Aumentei a altura para 750 para acomodar a nova lista de ativos confortavelmente
+        janela = self.criar_janela_secundaria("Gerenciar Objetivo", 850, 750)
+
+        frame_info = ctk.CTkFrame(janela)
+        frame_info.pack(padx=20, pady=10, fill="x")
+        frame_info.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkLabel(frame_info, text="Nome do Objetivo:").grid(row=0, column=0, padx=10, pady=(10,0), sticky="w")
+        ent_nome = ctk.CTkEntry(frame_info, width=250)
+        ent_nome.insert(0, nome_preenchido)
+        ent_nome.grid(row=1, column=0, padx=10, pady=5, sticky="w")
+
+        ctk.CTkLabel(frame_info, text="Meta Original / Valor Final (R$):").grid(row=0, column=1, padx=10, pady=(10,0), sticky="w")
+        ent_meta = ctk.CTkEntry(frame_info, width=250)
+        ent_meta.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+        self.configurar_entrada_moeda(ent_meta)
+
+        # --- Datas de Início e Fim com Calendários ---
+        ctk.CTkLabel(frame_info, text="Data Início (DD/MM/AAAA):").grid(row=2, column=0, padx=10, pady=(10,0), sticky="w")
+        frame_inicio = ctk.CTkFrame(frame_info, fg_color="transparent")
+        frame_inicio.grid(row=3, column=0, padx=10, pady=5, sticky="w")
+        ent_inicio = ctk.CTkEntry(frame_inicio, width=210)
+        ent_inicio.pack(side="left", padx=(0,2))
+        self.configurar_entrada_data(ent_inicio)
+        self.criar_datepicker(frame_inicio, ent_inicio).pack(side="left")
+
+        ctk.CTkLabel(frame_info, text="Data Fim (DD/MM/AAAA):").grid(row=2, column=1, padx=10, pady=(10,0), sticky="w")
+        frame_fim = ctk.CTkFrame(frame_info, fg_color="transparent")
+        frame_fim.grid(row=3, column=1, padx=10, pady=5, sticky="w")
+        ent_fim = ctk.CTkEntry(frame_fim, width=210)
+        ent_fim.pack(side="left", padx=(0,2))
+        self.configurar_entrada_data(ent_fim)
+        self.criar_datepicker(frame_fim, ent_fim).pack(side="left")
+
+        # --- NOVA SEÇÃO: OUTROS ATIVOS DINÂMICOS ---
+        ctk.CTkLabel(frame_info, text="Outros Ativos Vinculados (Ex: FGTS, Previdência Privada):", font=("Roboto", 12, "bold")).grid(row=4, column=0, columnspan=2, padx=10, pady=(15,0), sticky="w")
+        
+        # --- TRUQUE PARA FORÇAR ALTURA DO SCROLL ---
+        # Criamos um "wrapper" (envelope) normal com tamanho travado para burlar o limite do CTkScrollableFrame
+        frame_wrapper_ativos = ctk.CTkFrame(frame_info, height=45, fg_color="transparent")
+        frame_wrapper_ativos.grid(row=5, column=0, columnspan=2, padx=10, pady=(5, 0), sticky="ew")
+        frame_wrapper_ativos.pack_propagate(False) # Impede que o conteúdo interno force o envelope a crescer
+        
+        # O frame de scroll fica dentro desse envelope e preenche apenas o espaço que ele deixar
+        frame_ativos_scroll = ctk.CTkScrollableFrame(frame_wrapper_ativos, fg_color="#2b2b2b")
+        frame_ativos_scroll.pack(fill="both", expand=True)
+        
+        lbl_total_ativos = ctk.CTkLabel(frame_info, text="Total Outros Ativos: R$ 0,00", font=("Roboto", 13, "bold"), text_color="#2ECC71")
+        lbl_total_ativos.grid(row=6, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="e")
+
+        linhas_ativos_ui = [] # Guarda a referência dos campos gerados
+
+        def calcular_total_ativos(*args):
+            total = 0.0
+            for row in linhas_ativos_ui:
+                try:
+                    val = self.converter_moeda_para_float(row['ent_val'].get())
+                    total += val
+                except: pass
+            lbl_total_ativos.configure(text=f"Total Outros Ativos: {self.formatar_moeda(total)}")
+            return total
+
+        # --- NOVA FUNÇÃO DE AJUSTE DE ALTURA ---
+        # --- NOVA FUNÇÃO DE AJUSTE DE ALTURA ---
+        def ajustar_altura_scroll():
+            # Pega quantas linhas existem (se zero, conta como 1 para não achatar)
+            linhas = max(1, len(linhas_ativos_ui))
+            
+            # Calcula ~46 pixels por linha. Trava em no máximo 150px (cerca de 3-4 linhas visíveis)
+            # O min(150, ...) é o que garante que a lista (e a janela) não cresçam infinitamente!
+            nova_altura_scroll = min(150, linhas * 46)
+            
+            # Ajusta o frame interno
+            frame_wrapper_ativos.configure(height=nova_altura_scroll)
+            
+            # --- O PULO DO GATO: AUMENTAR A JANELA JUNTO ---
+            # Altura base da janela quando tem apenas 1 ativo (46px)
+            altura_base_janela = 730 
+            
+            # Calcula o quanto o scroll cresceu além do tamanho inicial
+            diferenca_crescimento = nova_altura_scroll - 46
+            
+            # Soma essa diferença na altura da janela
+            nova_altura_janela = altura_base_janela + diferenca_crescimento
+            
+            # Atualiza o tamanho da janela principal em tempo real
+            janela.geometry(f"850x{nova_altura_janela}")
+
+        def adicionar_linha_ativo(desc="", valor=0.0):
+            row_frame = ctk.CTkFrame(frame_ativos_scroll, fg_color="transparent")
+            row_frame.pack(fill="x", pady=2)
+
+            ent_desc = ctk.CTkEntry(row_frame, width=300, placeholder_text="Descrição do ativo (Ex: FGTS Caixa)")
+            ent_desc.pack(side="left", padx=(0, 10))
+            ent_desc.insert(0, desc)
+
+            ent_val = ctk.CTkEntry(row_frame, width=150, placeholder_text="Valor (R$)")
+            ent_val.pack(side="left", padx=(0, 10))
+            self.configurar_entrada_moeda(ent_val)
+            if valor:
+                ent_val.insert(0, f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+            # Atualiza o totalizador automaticamente quando a pessoa digita
+            ent_val.bind("<KeyRelease>", lambda e: calcular_total_ativos(), add="+")
+
+            def remover_linha():
+                row_frame.destroy()
+                linhas_ativos_ui.remove(row_dict)
+                calcular_total_ativos()
+                ajustar_altura_scroll() # Ajusta a altura ao remover
+
+            btn_rm = ctk.CTkButton(row_frame, text="X", width=30, fg_color="#E74C3C", hover_color="#C0392B", command=remover_linha)
+            btn_rm.pack(side="left")
+
+            row_dict = {'frame': row_frame, 'ent_desc': ent_desc, 'ent_val': ent_val}
+            linhas_ativos_ui.append(row_dict)
+            calcular_total_ativos()
+            ajustar_altura_scroll() # Ajusta a altura ao adicionar
+
+        btn_add_ativo = ctk.CTkButton(frame_info, text="+ Adicionar Novo Ativo", width=150, fg_color="#2980B9", command=adicionar_linha_ativo)
+        btn_add_ativo.grid(row=7, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+
+        # --- CARREGAR DADOS DO BANCO ---
+        if nome_preenchido in self.dados["objetivos"]:
+            info = self.dados["objetivos"][nome_preenchido]
+            ent_inicio.insert(0, info.get("inicio", ""))
+            ent_fim.insert(0, info.get("fim", ""))
+            
+            meta_banco = info.get("meta", info.get("montante", 0))
+            ent_meta.insert(0, f"{meta_banco:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            
+            # Carrega a lista nova de ativos ou faz retrocompatibilidade com a caixa de texto antiga
+            lista_ativos = info.get("lista_ativos", [])
+            if lista_ativos:
+                for ativo in lista_ativos:
+                    adicionar_linha_ativo(ativo.get("descricao", ""), ativo.get("valor", 0.0))
+            elif info.get("descricao_ativos") or info.get("outros_ativos", 0) > 0:
+                adicionar_linha_ativo(info.get("descricao_ativos", "Ativos Legados"), info.get("outros_ativos", 0.0))
+        
+        ajustar_altura_scroll() # Ajusta a altura final após carregar tudo do banco
+
+        def atualizar_dict_objetivo():
+            nome = ent_nome.get().strip()
+            if not nome: return None
+
+            if nome not in self.dados["objetivos"]:
+                self.dados["objetivos"][nome] = {"saldo": 0.0, "outros_ativos": 0.0, "movimentos": [], "lista_ativos": []}
+            
+            self.dados["objetivos"][nome]["inicio"] = ent_inicio.get().strip()
+            self.dados["objetivos"][nome]["fim"] = ent_fim.get().strip()
+            self.dados["objetivos"][nome]["meta"] = self.converter_moeda_para_float(ent_meta.get())
+            
+            # Salva a nova lista de ativos
+            lista_salvar = []
+            for row in linhas_ativos_ui:
+                desc = row['ent_desc'].get().strip()
+                val = self.converter_moeda_para_float(row['ent_val'].get())
+                if desc or val > 0:
+                    lista_salvar.append({"descricao": desc, "valor": val})
+            
+            self.dados["objetivos"][nome]["lista_ativos"] = lista_salvar
+            self.dados["objetivos"][nome]["outros_ativos"] = calcular_total_ativos() # Mantém atualizado para relatórios
+            self.dados["objetivos"][nome]["descricao_ativos"] = "" # Limpa o velho
+            
+            if "movimentos" not in self.dados["objetivos"][nome]:
+                self.dados["objetivos"][nome]["movimentos"] = []
+                self.dados["objetivos"][nome]["saldo"] = 0.0
+            return nome
+
+        # --- FRAME DE MOVIMENTOS ---
+        frame_mov = ctk.CTkFrame(janela)
+        frame_mov.pack(padx=20, pady=10, fill="x")
+        for i in range(4): frame_mov.grid_columnconfigure(i, weight=1) # Ajustado para 4 colunas
+
+        ctk.CTkLabel(frame_mov, text="Data", font=("Roboto", 12)).grid(row=0, column=0, padx=5, pady=(10, 0))
+        ctk.CTkLabel(frame_mov, text="Valor Lançado (R$)", font=("Roboto", 12)).grid(row=0, column=1, padx=5, pady=(10, 0))
+        ctk.CTkLabel(frame_mov, text="Tipo de Movimento", font=("Roboto", 12)).grid(row=0, column=2, padx=5, pady=(10, 0))
+        # Removemos o label de 'Valor do Ativo' daqui
+
+        frame_data_mov = ctk.CTkFrame(frame_mov, fg_color="transparent")
+        frame_data_mov.grid(row=1, column=0, padx=5, pady=(0, 15))
+        ent_data = ctk.CTkEntry(frame_data_mov, placeholder_text="DD/MM/AAAA", width=90)
+        ent_data.pack(side="left", padx=(0,2))
+        self.configurar_entrada_data(ent_data)
+        self.criar_datepicker(frame_data_mov, ent_data).pack(side="left")
+        
+        ent_valor = ctk.CTkEntry(frame_mov, width=110)
+        ent_valor.grid(row=1, column=1, padx=5, pady=(0, 15))
+        self.configurar_entrada_moeda(ent_valor)
+        
+        tipo_mov = ctk.CTkComboBox(frame_mov, values=["Aporte (Dinheiro)", "Resgate (Dinheiro)", "Atualizar Ativo"], width=160)
+        tipo_mov.grid(row=1, column=2, padx=5, pady=(0, 15))
+
+        def adicionar_movimento():
+            nome = atualizar_dict_objetivo()
+            if not nome:
+                messagebox.showwarning("Aviso", "Preencha o nome do objetivo primeiro!", parent=janela)
+                return
+
+            data = ent_data.get().strip()
+            valor_float = self.converter_moeda_para_float(ent_valor.get())
+            
+            # Puxa automaticamente a soma de todos os ativos da tela
+            valor_ativo_float = calcular_total_ativos()
+            tipo = tipo_mov.get()
+
+            if not data:
+                messagebox.showwarning("Aviso", "Preencha a data do movimento!", parent=janela)
+                return
+
+            if "Resgate" in tipo:
+                valor_exibicao = -valor_float
+            elif "Atualizar Ativo" in tipo:
+                valor_exibicao = 0.0
+            else:
+                valor_exibicao = valor_float
+
+            self.dados["objetivos"][nome]["saldo"] += valor_exibicao
+            self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float))
+            self.salvar_dados()
+            
+            # Formata montante atualizado para a tabela
+            saldo_atualizado = self.dados["objetivos"][nome]["saldo"]
+            tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
+            self.atualizar_tabelas_principais()
+
+            ent_data.delete(0, 'end')
+            ent_valor.delete(0, 'end')
+
+        btn_add = ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=90, command=adicionar_movimento)
+        btn_add.grid(row=1, column=3, padx=5, pady=(0, 15))
+
+        # --- TABELA DE MOVIMENTOS ---
+        colunas_mov = ("data", "tipo", "valor", "valor_ativo", "montante")
+        tree_movs = ttk.Treeview(janela, columns=colunas_mov, show='headings', height=6)
+        tree_movs.heading("data", text="Data")
+        tree_movs.heading("tipo", text="Tipo")
+        tree_movs.heading("valor", text="Valor Lançado")
+        tree_movs.heading("valor_ativo", text="Soma dos Ativos")
+        tree_movs.heading("montante", text="Montante do Objetivo") # Nova Coluna
+        
+        tree_movs.column("data", width=90, anchor="center")
+        tree_movs.column("tipo", width=140, anchor="w")
+        tree_movs.column("valor", width=110, anchor="e")
+        tree_movs.column("valor_ativo", width=110, anchor="e")
+        tree_movs.column("montante", width=120, anchor="e")
+        tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
+
+        def remover_movimento():
+            selecionado = tree_movs.selection()
+            if not selecionado:
+                messagebox.showwarning("Aviso", "Selecione um movimento para excluir!", parent=janela)
+                return
+            
+            if messagebox.askyesno("Confirmar", "Deseja excluir este movimento? (Isso afetará os montantes seguintes)"):
+                item = tree_movs.item(selecionado)
+                valores = item['values']
+                
+                nome = ent_nome.get().strip()
+                movimentos = self.dados["objetivos"][nome]["movimentos"]
+                
+                for i, mov in enumerate(movimentos):
+                    if mov[0] == str(valores[0]) and mov[1] == str(valores[1]):
+                        self.dados["objetivos"][nome]["saldo"] -= mov[2]
+                        del movimentos[i]
+                        break
+                
+                self.salvar_dados()
+                # Recarrega a janela para recalcular todos os montantes do histórico em cascata
+                janela.destroy()
+                self.abrir_janela_objetivo(nome)
+                self.atualizar_tabelas_principais()
+
+        btn_remover_mov = ctk.CTkButton(janela, text="Remover Movimento Selecionado", fg_color="#C0392B", command=remover_movimento)
+        btn_remover_mov.pack(pady=5)
+
+        # Preenche a tabela calculando o montante em tempo real no histórico
+        if nome_preenchido in self.dados["objetivos"]:
+            saldo_acumulado = 0.0
+            for mov in self.dados["objetivos"][nome_preenchido].get("movimentos", []):
+                saldo_acumulado += mov[2]
+                val_lancado = self.formatar_moeda(mov[2])
+                val_ativo = self.formatar_moeda(mov[3]) if len(mov) > 3 else "-" 
+                val_montante = self.formatar_moeda(saldo_acumulado)
+                tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo, val_montante))
+
+        def salvar_tudo_e_fechar():
+            try:
+                atualizar_dict_objetivo()
+                self.salvar_dados()
+                self.atualizar_tabelas_principais()
+                janela.destroy()
+            except ValueError:
+                messagebox.showerror("Erro", "Campos financeiros devem ser números!", parent=janela)
+
+        frame_botoes_obj = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_botoes_obj.pack(pady=15)
+
+        ctk.CTkButton(frame_botoes_obj, text="Salvar Informações e Fechar", command=salvar_tudo_e_fechar).pack(side="left", padx=10)
+
+        def excluir_objetivo():
+            if messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir o objetivo '{nome_preenchido}' e todo o seu histórico?", parent=janela):
+                if nome_preenchido in self.dados["objetivos"]:
+                    del self.dados["objetivos"][nome_preenchido]
+                    self.salvar_dados()
+                    self.atualizar_tabelas_principais()
+                    janela.destroy()
+
+        if nome_preenchido in self.dados["objetivos"]:
+            ctk.CTkButton(frame_botoes_obj, text="Excluir Objetivo (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_objetivo).pack(side="right", padx=10)
+
+
     def abrir_janela_aplicacao(self, nome_preenchido=""):
-        # Aumentei um pouco a janela para caber o novo campo sem espremer
         janela = self.criar_janela_secundaria("Gerenciar Aplicação", 750, 550)
 
-        # --- Frame superior para Nome e Categoria ---
         frame_dados_app = ctk.CTkFrame(janela, fg_color="transparent")
         frame_dados_app.pack(pady=10, padx=20, fill="x")
         frame_dados_app.grid_columnconfigure((0,1), weight=1)
@@ -878,106 +1551,97 @@ class AppInvest(ctk.CTk):
                 combo_tipo_app.configure(values=opcoes_carteira)
         combo_tipo_app.set(tipo_atual)
 
-        # Função auxiliar para pegar o saldo base no momento da digitação
         def obter_saldo_base():
             nome = ent_nome.get().strip()
             if nome in self.dados.get("aplicacoes", {}):
                 return self.dados["aplicacoes"][nome].get("saldo", 0.0)
             return 0.0
 
-        # --- Frame de Inserção de Movimentos ---
         frame_mov = ctk.CTkFrame(janela)
         frame_mov.pack(padx=20, pady=10, fill="x")
-        for i in range(5): frame_mov.grid_columnconfigure(i, weight=1) # Agora com 5 colunas
+        for i in range(5): frame_mov.grid_columnconfigure(i, weight=1)
 
-        ent_data = ctk.CTkEntry(frame_mov, placeholder_text="DD/MM/AAAA", width=90)
-        ent_data.grid(row=0, column=0, padx=5, pady=15)
+        # --- Sub-frame para agrupar Data e Calendário ---
+        frame_data = ctk.CTkFrame(frame_mov, fg_color="transparent")
+        frame_data.grid(row=0, column=0, padx=5, pady=15)
         
+        ent_data = ctk.CTkEntry(frame_data, placeholder_text="DD/MM/AAAA", width=90)
+        ent_data.pack(side="left", padx=(0,2))
+        self.configurar_entrada_data(ent_data) # <--- APLICAÇÃO DA FUNÇÃO
+        
+        btn_calendario = self.criar_datepicker(frame_data, ent_data) # <--- CALENDÁRIO
+        btn_calendario.pack(side="left")
+        
+        # --- Entradas de Valores ---
         ent_valor = ctk.CTkEntry(frame_mov, placeholder_text="Valor", width=100)
         ent_valor.grid(row=0, column=1, padx=5, pady=15)
+        self.configurar_entrada_moeda(ent_valor) # <--- MÁSCARA DE MOEDA
         
         tipo_mov = ctk.CTkComboBox(frame_mov, values=["Aporte", "Resgate", "Atualização"], width=110)
         tipo_mov.grid(row=0, column=2, padx=5, pady=15)
 
-        # NOVO: Campo de Saldo Total
         ent_saldo = ctk.CTkEntry(frame_mov, placeholder_text="Sd. Total", width=100)
         ent_saldo.grid(row=0, column=3, padx=5, pady=15)
+        self.configurar_entrada_moeda(ent_saldo) # <--- MÁSCARA DE MOEDA
 
-        # --- LÓGICA DE PREENCHIMENTO INTELIGENTE ---
+
         def on_valor_focusout(event=None):
-            """Quando o usuário digita o VALOR, calcula o Saldo Total projetado."""
             try:
-                val_str = ent_valor.get().replace(",", ".").strip()
-                if not val_str: return
-                val_float = float(val_str)
+                # Usa nossa nova função conversora segura
+                val_float = self.converter_moeda_para_float(ent_valor.get())
+                if val_float == 0: return
                 
                 saldo_base = obter_saldo_base()
-                if tipo_mov.get() == "Resgate":
-                    novo_saldo = saldo_base - abs(val_float)
-                else:
-                    novo_saldo = saldo_base + val_float
+                novo_saldo = saldo_base - val_float if tipo_mov.get() == "Resgate" else saldo_base + val_float
                 
+                # Atualiza campo de saldo formatado
                 ent_saldo.delete(0, 'end')
-                ent_saldo.insert(0, f"{novo_saldo:.2f}".replace(".", ","))
-            except ValueError:
-                pass
+                ent_saldo.insert(0, f"{novo_saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            except Exception: pass
 
         def on_saldo_focusout(event=None):
-            """Quando o usuário digita o SALDO TOTAL, calcula a diferença no Valor e muda para Atualização."""
             try:
-                saldo_str = ent_saldo.get().replace(",", ".").strip()
-                if not saldo_str: return
-                novo_saldo_digitado = float(saldo_str)
+                novo_saldo_digitado = self.converter_moeda_para_float(ent_saldo.get())
+                if novo_saldo_digitado == 0: return
                 
                 saldo_base = obter_saldo_base()
-                diferenca = novo_saldo_digitado - saldo_base
+                diferenca = abs(novo_saldo_digitado - saldo_base) # Pega o valor absoluto
                 
-                # Se mudou o saldo diretamente, assumimos que é uma Atualização de rendimento
                 tipo_mov.set("Atualização")
-                
                 ent_valor.delete(0, 'end')
-                ent_valor.insert(0, f"{diferenca:.2f}".replace(".", ","))
-            except ValueError:
-                pass
+                ent_valor.insert(0, f"{diferenca:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            except Exception: pass
 
-        # Conecta os eventos aos campos
         ent_valor.bind("<FocusOut>", on_valor_focusout)
-        tipo_mov.configure(command=on_valor_focusout) # Se ele mudar de Aporte pra Resgate no clique, já recalcula
+        tipo_mov.configure(command=on_valor_focusout)
         ent_saldo.bind("<FocusOut>", on_saldo_focusout)
 
-
-        # --- LÓGICA DO BOTÃO ADICIONAR ---
         def adicionar_movimento():
             nome = ent_nome.get().strip()
             data = ent_data.get().strip()
-            valor_str = ent_valor.get().replace(",", ".").strip()
+            # Converte usando o ajudante global
+            valor_float = self.converter_moeda_para_float(ent_valor.get())
             tipo = tipo_mov.get()
 
-            if not nome or not data or not valor_str: return
-            try: valor_float = abs(float(valor_str)) # Sempre tratamos o bruto como positivo
-            except ValueError: return
+            if not nome or not data or valor_float == 0: return
 
-            # SEGURANÇA DE SINAL
-            if tipo == "Resgate":
-                valor_exibicao = -valor_float
+            if nome not in self.dados["aplicacoes"]:
+                self.dados["aplicacoes"][nome] = {"saldo": 0.0, "tipo": combo_tipo_app.get(), "movimentos": []}
             else:
-                valor_exibicao = valor_float
+                self.dados["aplicacoes"][nome]["tipo"] = combo_tipo_app.get()
 
-            # Atualiza o saldo real da aplicação
+            valor_exibicao = -valor_float if tipo == "Resgate" else valor_float
+
             self.dados["aplicacoes"][nome]["saldo"] += valor_exibicao
             saldo_momento = self.dados["aplicacoes"][nome]["saldo"]
 
             self.dados["aplicacoes"][nome]["movimentos"].append((data, tipo, valor_exibicao, saldo_momento))
             self.salvar_dados()
             
-            # Insere na tabela
             tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(saldo_momento)))
             self.atualizar_tabelas_principais()
-
-            # Atualiza o Label bonitão lá embaixo
             lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_momento)}")
 
-            # Limpa os campos para o próximo
             ent_data.delete(0, 'end')
             ent_valor.delete(0, 'end')
             ent_saldo.delete(0, 'end')
@@ -985,15 +1649,13 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=100, command=adicionar_movimento).grid(row=0, column=4, padx=5, pady=15)
 
-        # --- TABELA COM 4 COLUNAS ---
         tree_movs = ttk.Treeview(janela, columns=("data", "tipo", "valor", "saldo"), show='headings', height=10)
         tree_movs.heading("data", text="Data")
         tree_movs.heading("tipo", text="Tipo")
         tree_movs.heading("valor", text="Valor")
-        tree_movs.heading("saldo", text="Sd. Total") # Nova coluna para histórico visual
+        tree_movs.heading("saldo", text="Sd. Total")
         tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
 
-        # --- FUNÇÃO PARA REMOVER MOVIMENTO NA APLICAÇÃO ---
         def remover_movimento_app():
             selecionado = tree_movs.selection()
             if not selecionado: return
@@ -1003,44 +1665,31 @@ class AppInvest(ctk.CTk):
             
             if messagebox.askyesno("Confirmar", "Excluir este lançamento?"):
                 mov = self.dados["aplicacoes"][nome]["movimentos"][item_index]
-                
-                # Subtrai o valor que havia sido somado (Estorno)
                 self.dados["aplicacoes"][nome]["saldo"] -= mov[2]
-                
-                # Remove da lista
                 del self.dados["aplicacoes"][nome]["movimentos"][item_index]
                 
                 self.salvar_dados()
                 tree_movs.delete(selecionado)
-                
-                # Atualiza o rodapé
                 novo_saldo = self.dados["aplicacoes"][nome]["saldo"]
                 lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(novo_saldo)}")
                 self.atualizar_tabelas_principais()
 
-        # Coloque este botão logo abaixo da tree_movs.pack()
         btn_del_mov = ctk.CTkButton(janela, text="Excluir Lançamento Selecionado", fg_color="#C0392B", command=remover_movimento_app)
         btn_del_mov.pack(pady=5)
 
         if nome_preenchido in self.dados["aplicacoes"]:
             for mov in self.dados["aplicacoes"][nome_preenchido]["movimentos"]:
-                # Puxa o saldo se existir (dados antigos tinham só 3 posições)
                 sd_hist = mov[3] if len(mov) > 3 else 0.0
                 tree_movs.insert("", "end", values=(mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
         
-        if hasattr(self, 'ajustar_larguras_tabela'):
-            self.ajustar_larguras_tabela(tree_movs)
+        if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
-        # --- LABEL DO SALDO ATUAL ---
         lbl_saldo_rodape = ctk.CTkLabel(janela, text="Saldo Atual: R$ 0,00", font=("Roboto", 18, "bold"), text_color="#2FA572")
         lbl_saldo_rodape.pack(pady=(10, 0))
         
-        # Inicia o label com o saldo se a aplicação já existir
         if nome_preenchido in self.dados.get("aplicacoes", {}):
             lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(self.dados['aplicacoes'][nome_preenchido].get('saldo', 0.0))}")
 
-
-        # --- BOTÕES FINAIS ---
         frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
         frame_botoes.pack(pady=15)
 
@@ -1055,8 +1704,7 @@ class AppInvest(ctk.CTk):
         ctk.CTkButton(frame_botoes, text="Fechar", command=fechar_e_salvar).pack(side="left", padx=10)
 
         def excluir_aplicacao():
-            resposta = messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir a aplicação '{nome_preenchido}'?", parent=janela)
-            if resposta:
+            if messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir a aplicação '{nome_preenchido}'?", parent=janela):
                 if nome_preenchido in self.dados["aplicacoes"]:
                     del self.dados["aplicacoes"][nome_preenchido]
                     self.salvar_dados()
@@ -1066,211 +1714,6 @@ class AppInvest(ctk.CTk):
         if nome_preenchido in self.dados["aplicacoes"]:
             ctk.CTkButton(frame_botoes, text="Excluir Aplicação (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_aplicacao).pack(side="right", padx=10)
 
-            
-
-    def abrir_janela_objetivo(self, nome_preenchido=""):
-        janela = self.criar_janela_secundaria("Gerenciar Objetivo", 800, 680)
-
-        frame_info = ctk.CTkFrame(janela)
-        frame_info.pack(padx=20, pady=10, fill="x")
-        frame_info.grid_columnconfigure((0, 1), weight=1)
-
-        ctk.CTkLabel(frame_info, text="Nome do Objetivo:").grid(row=0, column=0, padx=10, pady=(10,0), sticky="w")
-        ent_nome = ctk.CTkEntry(frame_info, width=250)
-        ent_nome.insert(0, nome_preenchido)
-        ent_nome.grid(row=1, column=0, padx=10, pady=5, sticky="w")
-
-        ctk.CTkLabel(frame_info, text="Meta Original / Valor Final (R$):").grid(row=0, column=1, padx=10, pady=(10,0), sticky="w")
-        ent_meta = ctk.CTkEntry(frame_info, width=250)
-        ent_meta.grid(row=1, column=1, padx=10, pady=5, sticky="w")
-
-        ctk.CTkLabel(frame_info, text="Data Início (DD/MM/AAAA):").grid(row=2, column=0, padx=10, pady=(10,0), sticky="w")
-        ent_inicio = ctk.CTkEntry(frame_info, width=250)
-        ent_inicio.grid(row=3, column=0, padx=10, pady=5, sticky="w")
-
-        ctk.CTkLabel(frame_info, text="Data Fim (DD/MM/AAAA):").grid(row=2, column=1, padx=10, pady=(10,0), sticky="w")
-        ent_fim = ctk.CTkEntry(frame_info, width=250)
-        ent_fim.grid(row=3, column=1, padx=10, pady=5, sticky="w")
-
-        ctk.CTkLabel(frame_info, text="Descrição de Outros Ativos (Ex: Carro HB20 2019, Saldo FGTS Caixa):").grid(row=4, column=0, columnspan=2, padx=10, pady=(10,0), sticky="w")
-        txt_descricao = ctk.CTkTextbox(frame_info, height=45)
-        txt_descricao.grid(row=5, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="ew")
-
-        valor_ativo_atual = 0.0
-
-        if nome_preenchido in self.dados["objetivos"]:
-            info = self.dados["objetivos"][nome_preenchido]
-            ent_inicio.insert(0, info.get("inicio", ""))
-            ent_fim.insert(0, info.get("fim", ""))
-            ent_meta.insert(0, str(info.get("meta", info.get("montante", 0))))
-            txt_descricao.insert("1.0", info.get("descricao_ativos", ""))
-            valor_ativo_atual = info.get("outros_ativos", 0.0)
-
-        def atualizar_dict_objetivo():
-            nome = ent_nome.get().strip()
-            if not nome: return None
-
-            if nome not in self.dados["objetivos"]:
-                self.dados["objetivos"][nome] = {"saldo": 0.0, "outros_ativos": 0.0, "movimentos": []}
-            
-            self.dados["objetivos"][nome]["inicio"] = ent_inicio.get().strip()
-            self.dados["objetivos"][nome]["fim"] = ent_fim.get().strip()
-            self.dados["objetivos"][nome]["meta"] = float(ent_meta.get().replace(",", ".") or 0)
-            self.dados["objetivos"][nome]["descricao_ativos"] = txt_descricao.get("1.0", "end-1c").strip()
-            
-            if "movimentos" not in self.dados["objetivos"][nome]:
-                self.dados["objetivos"][nome]["movimentos"] = []
-                self.dados["objetivos"][nome]["saldo"] = 0.0
-                if "outros_ativos" not in self.dados["objetivos"][nome]:
-                    self.dados["objetivos"][nome]["outros_ativos"] = 0.0
-
-            return nome
-
-        # --- FRAME DE MOVIMENTOS ---
-        frame_mov = ctk.CTkFrame(janela)
-        frame_mov.pack(padx=20, pady=10, fill="x")
-        for i in range(5): frame_mov.grid_columnconfigure(i, weight=1)
-
-        ctk.CTkLabel(frame_mov, text="Data", font=("Roboto", 12)).grid(row=0, column=0, padx=5, pady=(10, 0))
-        ctk.CTkLabel(frame_mov, text="Valor Lançado (R$)", font=("Roboto", 12)).grid(row=0, column=1, padx=5, pady=(10, 0))
-        ctk.CTkLabel(frame_mov, text="Tipo de Movimento", font=("Roboto", 12)).grid(row=0, column=2, padx=5, pady=(10, 0))
-        ctk.CTkLabel(frame_mov, text="Valor do Ativo (R$)", font=("Roboto", 12)).grid(row=0, column=3, padx=5, pady=(10, 0))
-
-        ent_data = ctk.CTkEntry(frame_mov, placeholder_text="DD/MM/AAAA", width=90)
-        ent_data.grid(row=1, column=0, padx=5, pady=(0, 15))
-        
-        ent_valor = ctk.CTkEntry(frame_mov, width=110)
-        ent_valor.grid(row=1, column=1, padx=5, pady=(0, 15))
-        
-        tipo_mov = ctk.CTkComboBox(frame_mov, values=["Aporte (Dinheiro)", "Resgate (Dinheiro)", "Atualizar Ativo"], width=160)
-        tipo_mov.grid(row=1, column=2, padx=5, pady=(0, 15))
-
-        ent_valor_ativo = ctk.CTkEntry(frame_mov, width=110)
-        ent_valor_ativo.grid(row=1, column=3, padx=5, pady=(0, 15))
-        ent_valor_ativo.insert(0, str(valor_ativo_atual))
-
-        def adicionar_movimento():
-            nome = atualizar_dict_objetivo()
-            if not nome:
-                messagebox.showwarning("Aviso", "Preencha o nome do objetivo primeiro!", parent=janela)
-                return
-
-            data = ent_data.get().strip()
-            valor_str = ent_valor.get().replace(",", ".").strip()
-            valor_ativo_str = ent_valor_ativo.get().replace(",", ".").strip()
-            tipo = tipo_mov.get()
-
-            if not data:
-                messagebox.showwarning("Aviso", "Preencha a data do movimento!", parent=janela)
-                return
-
-            try: 
-                valor_float = abs(float(valor_str)) if valor_str else 0.0 # Pegamos sempre o positivo primeiro
-                valor_ativo_float = float(valor_ativo_str) if valor_ativo_str else 0.0
-            except ValueError: 
-                messagebox.showwarning("Aviso", "Valor inválido!", parent=janela)
-                return
-
-            self.dados["objetivos"][nome]["outros_ativos"] = valor_ativo_float
-
-            # SEGURANÇA DE SINAL
-            if "Resgate" in tipo:
-                valor_exibicao = -valor_float # Força ser negativo
-            elif "Atualizar Ativo" in tipo:
-                valor_exibicao = 0.0
-            else:
-                valor_exibicao = valor_float # Aporte: Força ser positivo
-
-            # Atualiza o saldo do objetivo
-            self.dados["objetivos"][nome]["saldo"] += valor_exibicao
-            
-            self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float))
-            self.salvar_dados()
-            
-            tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float)))
-            self.atualizar_tabelas_principais()
-
-            ent_data.delete(0, 'end')
-            ent_valor.delete(0, 'end')
-
-        btn_add = ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=90, command=adicionar_movimento)
-        btn_add.grid(row=1, column=4, padx=5, pady=(0, 15))
-
-        colunas_mov = ("data", "tipo", "valor", "valor_ativo")
-        tree_movs = ttk.Treeview(janela, columns=colunas_mov, show='headings', height=6)
-        tree_movs.heading("data", text="Data")
-        tree_movs.heading("tipo", text="Tipo")
-        tree_movs.heading("valor", text="Valor Lançado")
-        tree_movs.heading("valor_ativo", text="Saldo do Ativo")
-        
-        tree_movs.column("data", width=90, anchor="center")
-        tree_movs.column("tipo", width=160, anchor="w")
-        tree_movs.column("valor", width=120, anchor="e")
-        tree_movs.column("valor_ativo", width=120, anchor="e")
-        tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
-
-        # --- BOTÃO DE EXCLUIR MOVIMENTO (ABAIXO DA TREEVIEW) ---
-        def remover_movimento():
-            selecionado = tree_movs.selection()
-            if not selecionado:
-                messagebox.showwarning("Aviso", "Selecione um movimento para excluir!", parent=janela)
-                return
-            
-            if messagebox.askyesno("Confirmar", "Deseja excluir este movimento?"):
-                item = tree_movs.item(selecionado)
-                valores = item['values'] # [data, tipo, valor, valor_ativo]
-                
-                # Encontra o índice na lista original (comparando os dados)
-                nome = ent_nome.get().strip()
-                movimentos = self.dados["objetivos"][nome]["movimentos"]
-                
-                for i, mov in enumerate(movimentos):
-                    # Formata o valor do banco para comparar com o da tabela
-                    if mov[0] == valores[0] and mov[1] == valores[1]:
-                        # Estorna o valor do saldo antes de excluir
-                        self.dados["objetivos"][nome]["saldo"] -= mov[2]
-                        del movimentos[i]
-                        break
-                
-                self.salvar_dados()
-                tree_movs.delete(selecionado)
-                self.atualizar_tabelas_principais()
-
-        btn_remover_mov = ctk.CTkButton(janela, text="Remover Movimento Selecionado", fg_color="#C0392B", command=remover_movimento)
-        btn_remover_mov.pack(pady=5)
-
-        if nome_preenchido in self.dados["objetivos"]:
-            for mov in self.dados["objetivos"][nome_preenchido].get("movimentos", []):
-                val_lancado = self.formatar_moeda(mov[2])
-                val_ativo = self.formatar_moeda(mov[3]) if len(mov) > 3 else "-" 
-                tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo))
-
-        def salvar_tudo_e_fechar():
-            try:
-                atualizar_dict_objetivo()
-                self.salvar_dados()
-                self.atualizar_tabelas_principais()
-                janela.destroy()
-            except ValueError:
-                messagebox.showerror("Erro", "Campos financeiros devem ser números!", parent=janela)
-
-        # --- FRAME DE BOTÕES INFERIORES ---
-        frame_botoes_obj = ctk.CTkFrame(janela, fg_color="transparent")
-        frame_botoes_obj.pack(pady=15)
-
-        ctk.CTkButton(frame_botoes_obj, text="Salvar Informações e Fechar", command=salvar_tudo_e_fechar).pack(side="left", padx=10)
-
-        def excluir_objetivo():
-            resposta = messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir o objetivo '{nome_preenchido}' e todo o seu histórico?", parent=janela)
-            if resposta:
-                if nome_preenchido in self.dados["objetivos"]:
-                    del self.dados["objetivos"][nome_preenchido]
-                    self.salvar_dados()
-                    self.atualizar_tabelas_principais()
-                    janela.destroy()
-
-        if nome_preenchido in self.dados["objetivos"]:
-            ctk.CTkButton(frame_botoes_obj, text="Excluir Objetivo (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_objetivo).pack(side="right", padx=10)
 
     def on_double_click_app(self, event):
         selecao = self.tree_app.selection()
