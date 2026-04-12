@@ -844,19 +844,22 @@ class AppInvest(ctk.CTk):
             alvo = self.dados["objetivos"][nome_obj]
             saldo_antigo = alvo.get("saldo", 0.0)
             
+            # Pega o valor atual dos outros ativos para não perder essa informação no histórico
+            ativos_atuais = alvo.get("outros_ativos", 0.0)
+            
             # Garante que a lista de movimentos existe no dicionário do objetivo
             if "movimentos" not in alvo:
                 alvo["movimentos"] = []
             
-            # Lança o débito (Zera o objetivo no histórico)
+            # Lança o débito (Zera o saldo em aplicações no histórico, mas MANTÉM os ativos_atuais)
             if saldo_antigo > 0:
-                alvo["movimentos"].append((data_atual, "Saída (Redistribuição)", -saldo_antigo, 0.0))
+                alvo["movimentos"].append((data_atual, "Saída (Redistribuição)", -saldo_antigo, ativos_atuais))
                 
-            # Lança o crédito (Injeta o novo valor calculado no histórico)
+            # Lança o crédito (Injeta o novo saldo calculado no histórico, e MANTÉM os ativos_atuais)
             if novo_saldo > 0:
-                alvo["movimentos"].append((data_atual, "Entrada (Redistribuição)", novo_saldo, novo_saldo))
+                alvo["movimentos"].append((data_atual, "Entrada (Redistribuição)", novo_saldo, ativos_atuais))
                 
-            # Atualiza o saldo oficial
+            # Atualiza APENAS o saldo oficial (o valor de outros_ativos e lista_ativos continuam intactos no banco)
             alvo["saldo"] = novo_saldo
             
         self.salvar_dados()
@@ -1257,22 +1260,51 @@ class AppInvest(ctk.CTk):
             # Cria a janelinha popup
             top = ctk.CTkToplevel(frame_pai)
             top.title("Calendário")
-            top.geometry("260x260")
+            
+            # --- POSICIONAMENTO DINÂMICO ---
+            # Garante que o botão já foi desenhado na tela para não retornar posição (0,0)
+            btn_calendario.update_idletasks() 
+            
+            # Pega as coordenadas X e Y do botão na tela do monitor
+            x_botao = btn_calendario.winfo_rootx()
+            y_botao = btn_calendario.winfo_rooty()
+            largura_botao = btn_calendario.winfo_width()
+            
+            # Calcula a posição: X (direita do botão + 5 pixels) e Y (mesma altura)
+            pos_x = x_botao + largura_botao + 5
+            pos_y = y_botao
+            
+            # Aplica o tamanho 260x260 e a posição exata
+            top.geometry(f"260x260+{pos_x}+{pos_y}")
+            # -------------------------------
+            
             top.attributes("-topmost", True) # Mantém por cima
             top.grab_set() # Foca a atenção nela
             
             cal = Calendar(top, selectmode='day', date_pattern='dd/mm/yyyy')
             cal.pack(pady=10, padx=10, fill="both", expand=True)
             
-            def confirmar_data():
+            # --- CLIQUE DUPLO ---
+            # O event=None é obrigatório. Sem ele, o duplo clique (<Double-1>) dá erro!
+            def confirmar_data(event=None):
                 entry_alvo.delete(0, 'end')
                 entry_alvo.insert(0, cal.get_date())
                 top.destroy()
                 
+            # Vincula o duplo clique esquerdo à função confirmar_data
+            cal.bind("<Double-1>", confirmar_data)
+            # --------------------
+            
+            # Mantemos o botão visível caso o usuário não saiba do duplo clique
             ctk.CTkButton(top, text="Confirmar", command=confirmar_data).pack(pady=5)
 
-        return ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
-
+        # Para o posicionamento funcionar, precisamos guardar o botão nesta variável
+        # em vez de retorná-lo direto.
+        btn_calendario = ctk.CTkButton(frame_pai, text="📅", width=30, command=abrir_calendario)
+        
+        return btn_calendario
+    
+    
     def converter_moeda_para_float(self, valor_str):
         """Remove os pontos de milhar e troca a vírgula para converter com segurança."""
         if not valor_str: return 0.0
@@ -1585,7 +1617,7 @@ class AppInvest(ctk.CTk):
                 val_montante = self.formatar_moeda(montante_total) # Agora mostra a soma!
                 
                 tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo_formatado, val_montante))
-                
+
         def salvar_tudo_e_fechar():
             try:
                 atualizar_dict_objetivo()
