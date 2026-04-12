@@ -954,25 +954,19 @@ class AppInvest(ctk.CTk):
             tipo = tipo_mov.get()
 
             if not nome or not data or not valor_str: return
-            try: valor_float = float(valor_str)
+            try: valor_float = abs(float(valor_str)) # Sempre tratamos o bruto como positivo
             except ValueError: return
 
-            if nome not in self.dados["aplicacoes"]:
-                self.dados["aplicacoes"][nome] = {"saldo": 0.0, "tipo": combo_tipo_app.get(), "movimentos": []}
-            else:
-                self.dados["aplicacoes"][nome]["tipo"] = combo_tipo_app.get()
-
-            # Calcula o novo saldo real
+            # SEGURANÇA DE SINAL
             if tipo == "Resgate":
-                self.dados["aplicacoes"][nome]["saldo"] -= abs(valor_float)
-                valor_exibicao = -abs(valor_float)
+                valor_exibicao = -valor_float
             else:
-                self.dados["aplicacoes"][nome]["saldo"] += valor_float
                 valor_exibicao = valor_float
 
+            # Atualiza o saldo real da aplicação
+            self.dados["aplicacoes"][nome]["saldo"] += valor_exibicao
             saldo_momento = self.dados["aplicacoes"][nome]["saldo"]
 
-            # NOVO: Salvando a estrutura com 4 itens (Data, Tipo, Valor do Movimento, Saldo do Momento)
             self.dados["aplicacoes"][nome]["movimentos"].append((data, tipo, valor_exibicao, saldo_momento))
             self.salvar_dados()
             
@@ -998,6 +992,35 @@ class AppInvest(ctk.CTk):
         tree_movs.heading("valor", text="Valor")
         tree_movs.heading("saldo", text="Sd. Total") # Nova coluna para histórico visual
         tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
+
+        # --- FUNÇÃO PARA REMOVER MOVIMENTO NA APLICAÇÃO ---
+        def remover_movimento_app():
+            selecionado = tree_movs.selection()
+            if not selecionado: return
+            
+            nome = ent_nome.get().strip()
+            item_index = tree_movs.index(selecionado)
+            
+            if messagebox.askyesno("Confirmar", "Excluir este lançamento?"):
+                mov = self.dados["aplicacoes"][nome]["movimentos"][item_index]
+                
+                # Subtrai o valor que havia sido somado (Estorno)
+                self.dados["aplicacoes"][nome]["saldo"] -= mov[2]
+                
+                # Remove da lista
+                del self.dados["aplicacoes"][nome]["movimentos"][item_index]
+                
+                self.salvar_dados()
+                tree_movs.delete(selecionado)
+                
+                # Atualiza o rodapé
+                novo_saldo = self.dados["aplicacoes"][nome]["saldo"]
+                lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(novo_saldo)}")
+                self.atualizar_tabelas_principais()
+
+        # Coloque este botão logo abaixo da tree_movs.pack()
+        btn_del_mov = ctk.CTkButton(janela, text="Excluir Lançamento Selecionado", fg_color="#C0392B", command=remover_movimento_app)
+        btn_del_mov.pack(pady=5)
 
         if nome_preenchido in self.dados["aplicacoes"]:
             for mov in self.dados["aplicacoes"][nome_preenchido]["movimentos"]:
@@ -1041,7 +1064,7 @@ class AppInvest(ctk.CTk):
                     janela.destroy()
 
         if nome_preenchido in self.dados["aplicacoes"]:
-            ctk.CTkButton(frame_botoes, text="Excluir 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_aplicacao).pack(side="right", padx=10)
+            ctk.CTkButton(frame_botoes, text="Excluir Aplicação (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_aplicacao).pack(side="right", padx=10)
 
             
 
@@ -1142,23 +1165,25 @@ class AppInvest(ctk.CTk):
                 return
 
             try: 
-                valor_float = float(valor_str) if valor_str else 0.0
+                valor_float = abs(float(valor_str)) if valor_str else 0.0 # Pegamos sempre o positivo primeiro
                 valor_ativo_float = float(valor_ativo_str) if valor_ativo_str else 0.0
             except ValueError: 
-                messagebox.showwarning("Aviso", "Os campos de valor devem conter apenas números!", parent=janela)
+                messagebox.showwarning("Aviso", "Valor inválido!", parent=janela)
                 return
 
             self.dados["objetivos"][nome]["outros_ativos"] = valor_ativo_float
 
-            if tipo == "Atualizar Ativo":
-                valor_exibicao = 0.0 
-            elif tipo == "Resgate (Dinheiro)":
-                self.dados["objetivos"][nome]["saldo"] -= valor_float
-                valor_exibicao = -valor_float
-            else: 
-                self.dados["objetivos"][nome]["saldo"] += valor_float
-                valor_exibicao = valor_float
+            # SEGURANÇA DE SINAL
+            if "Resgate" in tipo:
+                valor_exibicao = -valor_float # Força ser negativo
+            elif "Atualizar Ativo" in tipo:
+                valor_exibicao = 0.0
+            else:
+                valor_exibicao = valor_float # Aporte: Força ser positivo
 
+            # Atualiza o saldo do objetivo
+            self.dados["objetivos"][nome]["saldo"] += valor_exibicao
+            
             self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float))
             self.salvar_dados()
             
@@ -1183,6 +1208,36 @@ class AppInvest(ctk.CTk):
         tree_movs.column("valor", width=120, anchor="e")
         tree_movs.column("valor_ativo", width=120, anchor="e")
         tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
+
+        # --- BOTÃO DE EXCLUIR MOVIMENTO (ABAIXO DA TREEVIEW) ---
+        def remover_movimento():
+            selecionado = tree_movs.selection()
+            if not selecionado:
+                messagebox.showwarning("Aviso", "Selecione um movimento para excluir!", parent=janela)
+                return
+            
+            if messagebox.askyesno("Confirmar", "Deseja excluir este movimento?"):
+                item = tree_movs.item(selecionado)
+                valores = item['values'] # [data, tipo, valor, valor_ativo]
+                
+                # Encontra o índice na lista original (comparando os dados)
+                nome = ent_nome.get().strip()
+                movimentos = self.dados["objetivos"][nome]["movimentos"]
+                
+                for i, mov in enumerate(movimentos):
+                    # Formata o valor do banco para comparar com o da tabela
+                    if mov[0] == valores[0] and mov[1] == valores[1]:
+                        # Estorna o valor do saldo antes de excluir
+                        self.dados["objetivos"][nome]["saldo"] -= mov[2]
+                        del movimentos[i]
+                        break
+                
+                self.salvar_dados()
+                tree_movs.delete(selecionado)
+                self.atualizar_tabelas_principais()
+
+        btn_remover_mov = ctk.CTkButton(janela, text="Remover Movimento Selecionado", fg_color="#C0392B", command=remover_movimento)
+        btn_remover_mov.pack(pady=5)
 
         if nome_preenchido in self.dados["objetivos"]:
             for mov in self.dados["objetivos"][nome_preenchido].get("movimentos", []):
@@ -1215,7 +1270,7 @@ class AppInvest(ctk.CTk):
                     janela.destroy()
 
         if nome_preenchido in self.dados["objetivos"]:
-            ctk.CTkButton(frame_botoes_obj, text="Excluir 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_objetivo).pack(side="right", padx=10)
+            ctk.CTkButton(frame_botoes_obj, text="Excluir Objetivo (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_objetivo).pack(side="right", padx=10)
 
     def on_double_click_app(self, event):
         selecao = self.tree_app.selection()
