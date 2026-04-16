@@ -4,7 +4,6 @@
   <img alt="Print do Aplicativo" src="caminho/para/print-padrao.png">
 </picture>
 
-[README.md](https://github.com/user-attachments/files/26648928/README.md)
 # 📊 Gerenciador de Investimentos Pessoal
 
 Um aplicativo de código aberto para desktop, desenvolvido em Python, focado em ajudar você a gerenciar sua carteira de investimentos e alcançar seus objetivos financeiros de forma inteligente e automatizada.
@@ -43,6 +42,8 @@ O Gerenciador foi construído com foco em automação matemática. Ele faz o tra
 1. Vá até a aba [Releases](https://github.com/flavioescunha/Projetos_e_Aplicacoes/releases/).
 2. Baixe o arquivo `.exe` da versão mais recente.
 3. Coloque o arquivo em uma pasta da sua preferência e dê um clique duplo.
-4. **Pronto!** O aplicativo vai criar automaticamente um arquivo `dados_investimentos.json` na mesma pasta para salvar seu progresso. Faça backup desse arquivo regularmente!
 
----
+> ⚠️ **Aviso sobre o Windows SmartScreen (Falso Positivo):**
+> Como este é um projeto independente e gratuito, o Windows pode exibir uma tela azul ou um aviso do *Controle Inteligente de Aplicativos* dizendo que o programa foi bloqueado ou é desconhecido. Isso é um falso positivo comum em programas feitos em Python. Para abrir, clique em **"Mais informações"** e depois em **"Executar mesmo assim"** (ou clique em "Saiba mais" para liberar no Smart App Control).
+
+4. **Pronto!** O aplicativo vai criar automaticamente um arquivo `dados_investimentos.json` na mesma pasta para salvar seu progresso. Faça backup desse arquivo regularmente!
