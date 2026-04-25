@@ -1,9 +1,3 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="caminho/para/print-modo-escuro.png">
-  <source media="(prefers-color-scheme: light)" srcset="caminho/para/print-modo-claro.png">
-  <img alt="Print do Aplicativo" src="caminho/para/print-padrao.png">
-</picture>
-
 # 📊 Gerenciador de Investimentos Pessoal
 
 Um aplicativo de código aberto para desktop, desenvolvido em Python, focado em ajudar você a gerenciar sua carteira de investimentos e alcançar seus objetivos financeiros de forma inteligente e automatizada.
