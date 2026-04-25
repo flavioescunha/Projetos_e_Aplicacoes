@@ -4,8 +4,7 @@ Um aplicativo de código aberto para desktop, desenvolvido em Python, focado em 
 
 Ao contrário de planilhas complexas, este gerenciador possui um motor financeiro embutido que calcula rentabilidade real, corrige metas pela inflação e sugere onde aportar seu dinheiro com base no balanceamento ideal da sua carteira.
 
-> **Baixe agora a versão mais recente sem precisar instalar o Python:** https://github.com/flavioescunha/Projetos_e_Aplicacoes/releases/
-
+> **Baixe agora a versão mais recente sem precisar instalar o Python:** <https://github.com/flavioescunha/Projetos_e_Aplicacoes/releases/>
 ---
 
 ## 📸 Telas do Aplicativo
