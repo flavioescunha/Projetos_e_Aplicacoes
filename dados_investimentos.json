@@ -1,0 +1,541 @@
+{
+    "objetivos": {
+        "Troca de Celular": {
+            "saldo": 2054.1071035903565,
+            "movimentos": [
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    1033.7366555933718,
+                    0.0
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    1.7600447255720877,
+                    0.0
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    922.3706881336395,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída - Redistribuição",
+                    -1957.8673884525833,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada - Redistribuição",
+                    2053.8212871115384,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -2053.8212871115384,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    2054.1071035903565,
+                    2054.1071035903565
+                ]
+            ],
+            "inicio": "01/10/2025",
+            "fim": "1/1/2030",
+            "meta": 2000.0,
+            "outros_ativos": 0.0,
+            "descricao_ativos": ""
+        },
+        "Carro": {
+            "saldo": 23221.480866686587,
+            "outros_ativos": 43537.0,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Aporte (Dinheiro)",
+                    0.0,
+                    43537.0
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    21109.492039591085,
+                    43537.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída - Redistribuição",
+                    -21109.492039591085,
+                    43537.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada - Redistribuição",
+                    23212.191831125005,
+                    43537.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -23212.191831125005,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    23221.480866686587,
+                    23221.480866686587
+                ]
+            ],
+            "inicio": "1/10/2025",
+            "fim": "1/1/2028",
+            "meta": 65000.0,
+            "descricao_ativos": "VW Up! 2016 https://veiculos.fipe.org.br/    Código Fipe:\t005399-6"
+        },
+        "Aposentadoria": {
+            "saldo": 47275.01170184273,
+            "outros_ativos": 26675.05,
+            "movimentos": [
+                [
+                    "10/4/2026",
+                    "Aporte (Dinheiro)",
+                    0.0,
+                    26675.05
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    18606.387404212077,
+                    26675.05
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    69.8699552744253,
+                    26675.05
+                ],
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    36691.48931186636,
+                    26675.05
+                ],
+                [
+                    "12/04/2026",
+                    "Saída - Redistribuição",
+                    -55367.74667135286,
+                    26675.05
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada - Redistribuição",
+                    47830.53298116,
+                    26675.05
+                ],
+                [
+                    "12/04/2026",
+                    "Aporte (Dinheiro)",
+                    1013.0482950289312,
+                    26675.05
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -48843.58127618893,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    47275.01170184273,
+                    47275.01170184273
+                ]
+            ],
+            "inicio": "1/10/2025",
+            "fim": "1/10/2045",
+            "meta": 400000.0,
+            "descricao_ativos": "FGTS"
+        },
+        "Viagem Anual": {
+            "saldo": 3079.1951683343964,
+            "outros_ativos": 0.0,
+            "movimentos": [
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    3078.699629726832,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -3078.699629726832,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    3079.1951683343964,
+                    3079.1951683343964
+                ]
+            ],
+            "inicio": "1/11/2025",
+            "fim": "10/4/2027",
+            "meta": 3000.0,
+            "descricao_ativos": ""
+        },
+        "Manutenção do Carro": {
+            "saldo": 3081.160655385535,
+            "outros_ativos": 0.0,
+            "movimentos": [
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    3080.7319306673076,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -3080.7319306673076,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    3081.160655385535,
+                    3081.160655385535
+                ]
+            ],
+            "inicio": "1/10/2025",
+            "fim": "10/4/2027",
+            "meta": 3000.0,
+            "descricao_ativos": ""
+        },
+        "Taxas": {
+            "saldo": 4201.942751959056,
+            "outros_ativos": 0.0,
+            "movimentos": [
+                [
+                    "11/04/2026",
+                    "Aporte (Dinheiro)",
+                    4201.1606501573115,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -4201.1606501573115,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    4201.942751959056,
+                    4201.942751959056
+                ]
+            ],
+            "inicio": "1/12/2025",
+            "fim": "12/3/2027",
+            "meta": 4100.0,
+            "descricao_ativos": "IPTU\tIPVA\tSeguro\tLicenciamento\tTOTAL\njan/26\t900\t1400\t1600\t160\t4060"
+        },
+        "IR": {
+            "saldo": 5338.56,
+            "outros_ativos": 0.0,
+            "movimentos": [
+                [
+                    "12/04/2026",
+                    "Entrada - Redistribuição",
+                    5338.56,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -5338.56,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    5338.56,
+                    5338.56
+                ]
+            ],
+            "inicio": "11/4/2026",
+            "fim": "31/05/2026",
+            "meta": 5338.56,
+            "descricao_ativos": "Exercício 2026"
+        },
+        "Manutenção da Casa/Móveis": {
+            "saldo": 2050.951752201344,
+            "outros_ativos": 0.0,
+            "movimentos": [
+                [
+                    "11/4/2026",
+                    "Aporte (Dinheiro)",
+                    2050.62,
+                    0.0
+                ],
+                [
+                    "12/4/2026",
+                    "Resgate (Dinheiro)",
+                    -1858.0,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Aporte (Dinheiro)",
+                    194.95339502309656,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Saída (Redistribuição)",
+                    -387.57339502309645,
+                    0.0
+                ],
+                [
+                    "12/04/2026",
+                    "Entrada (Redistribuição)",
+                    2050.951752201344,
+                    2050.951752201344
+                ]
+            ],
+            "inicio": "16/11/2025",
+            "fim": "16/12/2026",
+            "meta": 2000.0,
+            "descricao_ativos": ""
+        }
+    },
+    "aplicacoes": {
+        "Ações Toro": {
+            "saldo": 200.0,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    161.21,
+                    161.21
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    38.79,
+                    200.0
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    1.0,
+                    201.0
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    1.0,
+                    202.0
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    2.0,
+                    204.0
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    4.0,
+                    208.0
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    -8.0,
+                    200.0
+                ]
+            ],
+            "tipo": "Ações"
+        },
+        "DIVD11": {
+            "saldo": 2801.6,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    2801.6,
+                    2801.6
+                ]
+            ],
+            "tipo": "DIVD11"
+        },
+        "RF LP High": {
+            "saldo": 899.9999999999998,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    2982.7,
+                    2982.7
+                ],
+                [
+                    "12/4/2026",
+                    "Resgate",
+                    -2150.0,
+                    832.6999999999998
+                ],
+                [
+                    "12/04/2026",
+                    "Atualização",
+                    67.3,
+                    899.9999999999998
+                ]
+            ],
+            "tipo": "Outros"
+        },
+        "Tesouro Educa+ 2026": {
+            "saldo": 9731.62,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    9731.62,
+                    9731.62
+                ]
+            ]
+        },
+        "Tesouro IPCA+ 2045": {
+            "saldo": 643.5,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    643.5,
+                    643.5
+                ]
+            ]
+        },
+        "Tesouro IPCA+ com Juros Semestrais 2055": {
+            "saldo": 7825.97,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    7825.97,
+                    7825.97
+                ]
+            ]
+        },
+        "Tesouro Renda+ Aposentadoria Extra 2050": {
+            "saldo": 290.66,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    290.66,
+                    290.66
+                ]
+            ],
+            "tipo": "Tesouro Aposentadoria +Renda Extra"
+        },
+        "Tesouro Selic 2029": {
+            "saldo": 2626.0,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    2626.0,
+                    2626.0
+                ]
+            ],
+            "tipo": "Tesouro Selic"
+        },
+        "Tesouro Selic 2031": {
+            "saldo": 23558.27,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    23558.27,
+                    23558.27
+                ]
+            ],
+            "tipo": "Tesouro Selic"
+        },
+        "BB CDB DI": {
+            "saldo": 2539.3,
+            "movimentos": [
+                [
+                    "10/04/2026",
+                    "Atualização",
+                    2539.3,
+                    2539.3
+                ]
+            ],
+            "tipo": "CDB"
+        },
+        "Mercado Bitcoin": {
+            "saldo": 71.63,
+            "tipo": "Bitcoin",
+            "movimentos": [
+                [
+                    "11/04/2026",
+                    "Atualização",
+                    71.63,
+                    71.63
+                ]
+            ]
+        },
+        "Indusprev Previdência Sesi": {
+            "saldo": 37613.86,
+            "tipo": "Outros",
+            "movimentos": [
+                [
+                    "11/4/2026",
+                    "Atualização",
+                    37613.86,
+                    37613.86
+                ]
+            ]
+        },
+        "Emprésetimo para Érika": {
+            "saldo": 1500.0,
+            "tipo": "Outros",
+            "movimentos": [
+                [
+                    "12/04/2026",
+                    "Aporte",
+                    1500.0,
+                    1500.0
+                ]
+            ]
+        }
+    },
+    "carteira_ideal": {
+        "Tesouro Selic": 25.0,
+        "Tesouro Aposentadoria +Renda Extra": 25.0,
+        "CDB": 20.0,
+        "DIVD11": 3.125,
+        "BOVA11": 3.125,
+        "IVVB11": 3.125,
+        "KNCA11": 2.08,
+        "IFRA11": 2.08,
+        "KNCR11": 2.08,
+        "BTLG11": 2.08,
+        "HGLG11": 2.09,
+        "LVBI11": 2.09,
+        "Bitcoin": 5.0,
+        "Ações": 3.125
+    },
+    "config_taxa_pmt": {
+        "modo": "auto",
+        "valor": 0.005
+    }
+}
