@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.10"  # Caixa de comentários em inserção de objetivos e de aplicações, ajustes nos botões e outras correções.
+VERSAO_ATUAL = "v1.0.11"  # Percentuais atuais na janela de edição de carteira.
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1782,70 +1782,151 @@ class AppInvest(ctk.CTk):
         nome = self.tree_obj.item(selecao[0], "values")[0]
         self.abrir_janela_objetivo(nome)
 
-
     def abrir_janela_editar_carteira(self):
-        janela = self.criar_janela_secundaria("Editar Carteira Ideal", 550, 600)
+        janela = self.criar_janela_secundaria("Editar Carteira Ideal", 700, 600)
         
-        ctk.CTkLabel(janela, text="Configurar Percentuais Ideais (%)", font=("Roboto", 16, "bold")).pack(pady=10)
-        
+        ctk.CTkLabel(
+            janela,
+            text="Configurar Percentuais Ideais (%)",
+            font=("Roboto", 16, "bold")
+        ).pack(pady=10)
+
+        # ==========================================================
+        # 1) Calcula os percentuais atuais da carteira
+        # ==========================================================
+        saldo_total = 0.0
+        saldos_por_categoria = {}
+
+        for nome_app, info in self.dados.get("aplicacoes", {}).items():
+            saldo = float(info.get("saldo", 0.0))
+            categoria = info.get("tipo", "Outros")
+            saldo_total += saldo
+            saldos_por_categoria[categoria] = saldos_por_categoria.get(categoria, 0.0) + saldo
+
+        def obter_pct_atual(categoria):
+            if saldo_total <= 0:
+                return 0.0
+            return (saldos_por_categoria.get(categoria, 0.0) / saldo_total) * 100.0
+
+        # ==========================================================
+        # 2) Cabeçalho
+        # ==========================================================
+        frame_header = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_header.pack(fill="x", padx=20, pady=(0, 5))
+
+        ctk.CTkLabel(frame_header, text="% Atual", width=110, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="Categoria", width=300, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="% Ideal", width=80, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+
         frame_lista = ctk.CTkScrollableFrame(janela, height=350)
         frame_lista.pack(fill="both", expand=True, padx=20, pady=5)
-        
+
         entradas = {}
-        
+
+        # ==========================================================
+        # 3) Linhas
+        # ==========================================================
         def adicionar_linha(cat="", pct=0.0):
             row_frame = ctk.CTkFrame(frame_lista, fg_color="transparent")
             row_frame.pack(fill="x", pady=2)
-            
+
+            pct_atual = obter_pct_atual(cat)
+
+            lbl_atual = ctk.CTkLabel(
+                row_frame,
+                text=f"{pct_atual:.2f}%".replace(".", ","),
+                width=110,
+                anchor="center",
+                font=("Roboto", 12, "bold"),
+                text_color="#3498DB"
+            )
+            lbl_atual.pack(side="left", padx=5)
+
             ent_cat = ctk.CTkEntry(row_frame, width=300, placeholder_text="Nome do Ativo/Categoria")
             ent_cat.insert(0, cat)
             ent_cat.pack(side="left", padx=5)
-            
+
             ent_pct = ctk.CTkEntry(row_frame, width=80, placeholder_text="%")
             ent_pct.insert(0, str(pct))
             ent_pct.pack(side="left", padx=5)
-            
+
+            def atualizar_label_percentual(event=None):
+                categoria_digitada = ent_cat.get().strip()
+                pct_novo = obter_pct_atual(categoria_digitada)
+                lbl_atual.configure(text=f"{pct_novo:.2f}%".replace(".", ","))
+
+            ent_cat.bind("<KeyRelease>", atualizar_label_percentual)
+
             def remover():
                 row_frame.destroy()
                 if row_frame in entradas:
                     del entradas[row_frame]
 
-            btn_rm = ctk.CTkButton(row_frame, text="X", width=30, fg_color="#E74C3C", command=remover)
+            btn_rm = ctk.CTkButton(
+                row_frame,
+                text="X",
+                width=30,
+                fg_color="#E74C3C",
+                hover_color="#C0392B",
+                command=remover
+            )
             btn_rm.pack(side="left", padx=5)
-            
-            entradas[row_frame] = (ent_cat, ent_pct)
+
+            entradas[row_frame] = (ent_cat, ent_pct, lbl_atual)
 
         for cat, pct in self.dados.get("carteira_ideal", {}).items():
             adicionar_linha(cat, pct)
-            
-        ctk.CTkButton(janela, text="+ Adicionar Linha", command=lambda: adicionar_linha()).pack(pady=10)
-        
+
+        ctk.CTkButton(
+            janela,
+            text="+ Adicionar Linha",
+            command=lambda: adicionar_linha()
+        ).pack(pady=10)
+
+        # ==========================================================
+        # 4) Salvar
+        # ==========================================================
         def salvar():
             nova_carteira = {}
             soma = 0.0
-            for r_frame, (e_cat, e_pct) in entradas.items():
+
+            for r_frame, (e_cat, e_pct, lbl_atual) in entradas.items():
                 c = e_cat.get().strip()
                 p_str = e_pct.get().replace(",", ".").strip()
+
                 if c and p_str:
                     try:
                         p = float(p_str)
                         nova_carteira[c] = p
                         soma += p
                     except ValueError:
-                        messagebox.showerror("Erro", f"Valor percentual inválido em '{c}'", parent=janela)
+                        messagebox.showerror(
+                            "Erro",
+                            f"Valor percentual inválido em '{c}'",
+                            parent=janela
+                        )
                         return
-            
-            # Validação amigável
+
             if abs(soma - 100.0) > 0.01:
-                if not messagebox.askyesno("Aviso", f"A soma dos percentuais bateu em {soma}%. O mercado indica manter em 100%.\nDeseja salvar mesmo assim?", parent=janela):
+                if not messagebox.askyesno(
+                    "Aviso",
+                    f"A soma dos percentuais bateu em {soma:.2f}%. "
+                    f"O mercado indica manter em 100%.\nDeseja salvar mesmo assim?",
+                    parent=janela
+                ):
                     return
-                    
+
             self.dados["carteira_ideal"] = nova_carteira
             self.salvar_dados()
             self.atualizar_tabelas_principais()
             janela.destroy()
 
-        ctk.CTkButton(janela, text="Salvar Nova Carteira", fg_color="green", command=salvar).pack(pady=10)
+        ctk.CTkButton(
+            janela,
+            text="Salvar Nova Carteira",
+            fg_color="green",
+            command=salvar
+        ).pack(pady=10)
 
 if __name__ == "__main__":
     app = AppInvest()
