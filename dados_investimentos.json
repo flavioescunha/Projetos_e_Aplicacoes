@@ -434,16 +434,23 @@
             ]
         },
         "Tesouro Renda+ Aposentadoria Extra 2050": {
-            "saldo": 290.66,
+            "saldo": 2790.66,
             "movimentos": [
                 [
                     "10/04/2026",
                     "Atualização",
                     290.66,
                     290.66
+                ],
+                [
+                    "29/05/2026",
+                    "Aporte",
+                    2500.0,
+                    2790.66
                 ]
             ],
-            "tipo": "Tesouro Aposentadoria +Renda Extra"
+            "tipo": "Tesouro Aposentadoria +Renda Extra",
+            "comentario": ""
         },
         "Tesouro Selic 2029": {
             "saldo": 2626.0,

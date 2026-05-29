@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.11"  # Percentuais atuais na janela de edição de carteira.
+VERSAO_ATUAL = "v1.0.11"  # Percentuais atuais na janela de edição de carteira, cálculo de distruição de valor a aplicar.
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1783,8 +1783,8 @@ class AppInvest(ctk.CTk):
         self.abrir_janela_objetivo(nome)
 
     def abrir_janela_editar_carteira(self):
-        janela = self.criar_janela_secundaria("Editar Carteira Ideal", 700, 600)
-        
+        janela = self.criar_janela_secundaria("Editar Carteira Ideal", 930, 720)
+
         ctk.CTkLabel(
             janela,
             text="Configurar Percentuais Ideais (%)",
@@ -1792,21 +1792,24 @@ class AppInvest(ctk.CTk):
         ).pack(pady=10)
 
         # ==========================================================
-        # 1) Calcula os percentuais atuais da carteira
+        # 1) Saldos atuais por categoria
         # ==========================================================
-        saldo_total = 0.0
+        saldo_total_atual = 0.0
         saldos_por_categoria = {}
 
         for nome_app, info in self.dados.get("aplicacoes", {}).items():
             saldo = float(info.get("saldo", 0.0))
             categoria = info.get("tipo", "Outros")
-            saldo_total += saldo
+            saldo_total_atual += saldo
             saldos_por_categoria[categoria] = saldos_por_categoria.get(categoria, 0.0) + saldo
 
+        def obter_saldo_atual(categoria):
+            return saldos_por_categoria.get(categoria, 0.0)
+
         def obter_pct_atual(categoria):
-            if saldo_total <= 0:
+            if saldo_total_atual <= 0:
                 return 0.0
-            return (saldos_por_categoria.get(categoria, 0.0) / saldo_total) * 100.0
+            return (obter_saldo_atual(categoria) / saldo_total_atual) * 100.0
 
         # ==========================================================
         # 2) Cabeçalho
@@ -1814,35 +1817,47 @@ class AppInvest(ctk.CTk):
         frame_header = ctk.CTkFrame(janela, fg_color="transparent")
         frame_header.pack(fill="x", padx=20, pady=(0, 5))
 
-        ctk.CTkLabel(frame_header, text="% Atual", width=110, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
-        ctk.CTkLabel(frame_header, text="Categoria", width=300, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="% Atual", width=90, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="Saldo Atual", width=120, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="Categoria", width=260, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
         ctk.CTkLabel(frame_header, text="% Ideal", width=80, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(frame_header, text="Aplicar (R$)", width=120, font=("Roboto", 12, "bold")).pack(side="left", padx=5)
 
-        frame_lista = ctk.CTkScrollableFrame(janela, height=350)
+        frame_lista = ctk.CTkScrollableFrame(janela, height=380)
         frame_lista.pack(fill="both", expand=True, padx=20, pady=5)
 
         entradas = {}
 
         # ==========================================================
-        # 3) Linhas
+        # 3) Linhas da carteira
         # ==========================================================
         def adicionar_linha(cat="", pct=0.0):
             row_frame = ctk.CTkFrame(frame_lista, fg_color="transparent")
             row_frame.pack(fill="x", pady=2)
 
             pct_atual = obter_pct_atual(cat)
+            saldo_cat = obter_saldo_atual(cat)
 
             lbl_atual = ctk.CTkLabel(
                 row_frame,
                 text=f"{pct_atual:.2f}%".replace(".", ","),
-                width=110,
+                width=90,
                 anchor="center",
                 font=("Roboto", 12, "bold"),
                 text_color="#3498DB"
             )
             lbl_atual.pack(side="left", padx=5)
 
-            ent_cat = ctk.CTkEntry(row_frame, width=300, placeholder_text="Nome do Ativo/Categoria")
+            lbl_saldo = ctk.CTkLabel(
+                row_frame,
+                text=self.formatar_moeda(saldo_cat),
+                width=120,
+                anchor="e",
+                font=("Roboto", 12)
+            )
+            lbl_saldo.pack(side="left", padx=5)
+
+            ent_cat = ctk.CTkEntry(row_frame, width=260, placeholder_text="Nome do Ativo/Categoria")
             ent_cat.insert(0, cat)
             ent_cat.pack(side="left", padx=5)
 
@@ -1850,17 +1865,36 @@ class AppInvest(ctk.CTk):
             ent_pct.insert(0, str(pct))
             ent_pct.pack(side="left", padx=5)
 
-            def atualizar_label_percentual(event=None):
+            lbl_aplicar = ctk.CTkLabel(
+                row_frame,
+                text="R$ 0,00",
+                width=120,
+                anchor="e",
+                font=("Roboto", 12, "bold"),
+                text_color="#2FA572"
+            )
+            lbl_aplicar.pack(side="left", padx=5)
+
+            def atualizar_info_categoria(event=None):
                 categoria_digitada = ent_cat.get().strip()
                 pct_novo = obter_pct_atual(categoria_digitada)
-                lbl_atual.configure(text=f"{pct_novo:.2f}%".replace(".", ","))
+                saldo_novo = obter_saldo_atual(categoria_digitada)
 
-            ent_cat.bind("<KeyRelease>", atualizar_label_percentual)
+                lbl_atual.configure(text=f"{pct_novo:.2f}%".replace(".", ","))
+                lbl_saldo.configure(text=self.formatar_moeda(saldo_novo))
+
+                # Recalcula automaticamente a distribuição se já houver valor digitado
+                if ent_valor_aplicar.get().strip():
+                    calcular_distribuicao()
+
+            ent_cat.bind("<KeyRelease>", atualizar_info_categoria)
+            ent_pct.bind("<KeyRelease>", lambda e: calcular_distribuicao() if ent_valor_aplicar.get().strip() else None)
 
             def remover():
                 row_frame.destroy()
                 if row_frame in entradas:
                     del entradas[row_frame]
+                calcular_distribuicao()
 
             btn_rm = ctk.CTkButton(
                 row_frame,
@@ -1872,7 +1906,13 @@ class AppInvest(ctk.CTk):
             )
             btn_rm.pack(side="left", padx=5)
 
-            entradas[row_frame] = (ent_cat, ent_pct, lbl_atual)
+            entradas[row_frame] = {
+                "ent_cat": ent_cat,
+                "ent_pct": ent_pct,
+                "lbl_atual": lbl_atual,
+                "lbl_saldo": lbl_saldo,
+                "lbl_aplicar": lbl_aplicar
+            }
 
         for cat, pct in self.dados.get("carteira_ideal", {}).items():
             adicionar_linha(cat, pct)
@@ -1884,15 +1924,192 @@ class AppInvest(ctk.CTk):
         ).pack(pady=10)
 
         # ==========================================================
-        # 4) Salvar
+        # 4) Área inferior: valor a aplicar + cálculo de distribuição
+        # ==========================================================
+        frame_bottom = ctk.CTkFrame(janela)
+        frame_bottom.pack(fill="x", padx=20, pady=(10, 10))
+
+        ctk.CTkLabel(
+            frame_bottom,
+            text="Valor que pretendo aplicar (R$):",
+            font=("Roboto", 12, "bold")
+        ).grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
+
+        ent_valor_aplicar = ctk.CTkEntry(frame_bottom, width=150)
+        ent_valor_aplicar.grid(row=0, column=1, padx=10, pady=(10, 5), sticky="w")
+        self.configurar_entrada_moeda(ent_valor_aplicar)
+
+        lbl_resumo = ctk.CTkLabel(
+            frame_bottom,
+            text="Digite um valor para simular a distribuição do aporte.",
+            font=("Roboto", 12, "bold"),
+            text_color="#E67E22"
+        )
+        lbl_resumo.grid(row=1, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="w")
+
+        def ler_carteira_digitada():
+            nova_carteira = {}
+
+            for dados_linha in entradas.values():
+                categoria = dados_linha["ent_cat"].get().strip()
+                pct_str = dados_linha["ent_pct"].get().replace(",", ".").strip()
+
+                if categoria and pct_str:
+                    try:
+                        pct = float(pct_str)
+                        nova_carteira[categoria] = pct
+                    except ValueError:
+                        return None
+
+            return nova_carteira
+
+        def calcular_valor_para_atingir_ideal(saldo_categoria, saldo_total, percentual_ideal):
+            """
+            Resolve:
+                (saldo_categoria + x) / (saldo_total + x) = percentual_ideal
+            """
+            p = percentual_ideal / 100.0
+
+            if p <= 0:
+                return 0.0
+            if p >= 1:
+                return float("inf")
+
+            numerador = (p * saldo_total) - saldo_categoria
+            denominador = (1 - p)
+
+            if denominador <= 0:
+                return 0.0
+
+            x = numerador / denominador
+            return max(0.0, x)
+
+        def calcular_distribuicao(event=None):
+            # Zera coluna de aplicação
+            for dados_linha in entradas.values():
+                dados_linha["lbl_aplicar"].configure(text="R$ 0,00")
+
+            valor_aporte = self.converter_moeda_para_float(ent_valor_aplicar.get())
+            if valor_aporte <= 0:
+                lbl_resumo.configure(
+                    text="Digite um valor para simular a distribuição do aporte.",
+                    text_color="#E67E22"
+                )
+                return
+
+            carteira_digitada = ler_carteira_digitada()
+            if carteira_digitada is None:
+                lbl_resumo.configure(
+                    text="Há percentual inválido em uma das linhas.",
+                    text_color="#E74C3C"
+                )
+                return
+
+            if not carteira_digitada:
+                lbl_resumo.configure(
+                    text="Nenhuma categoria válida foi informada.",
+                    text_color="#E74C3C"
+                )
+                return
+
+            # Estado inicial
+            saldo_total_simulado = sum(
+                float(info.get("saldo", 0.0))
+                for info in self.dados.get("aplicacoes", {}).values()
+            )
+
+            # Saldos só das categorias digitadas
+            saldos_simulados = {
+                cat: obter_saldo_atual(cat)
+                for cat in carteira_digitada.keys()
+            }
+
+            distribuicao = {cat: 0.0 for cat in carteira_digitada.keys()}
+            restante = valor_aporte
+
+            # Proteção contra loop infinito
+            for _ in range(1000):
+                if restante <= 0.009:
+                    break
+
+                categorias_defasadas = []
+
+                for cat, pct_ideal in carteira_digitada.items():
+                    if pct_ideal <= 0:
+                        continue
+
+                    saldo_cat = saldos_simulados.get(cat, 0.0)
+                    pct_atual = 0.0 if saldo_total_simulado <= 0 else (saldo_cat / saldo_total_simulado) * 100.0
+
+                    # Distância relativa:
+                    # negativo = abaixo do ideal
+                    # zero = no ideal
+                    # positivo = acima do ideal
+                    indice_relativo = (pct_atual - pct_ideal) / pct_ideal
+
+                    # Só considera quem está abaixo do ideal
+                    if indice_relativo < -0.000001:
+                        categorias_defasadas.append((cat, indice_relativo, pct_ideal, saldo_cat))
+
+                if not categorias_defasadas:
+                    break
+
+                # Menor índice = categoria mais distante do ideal relativamente
+                categorias_defasadas.sort(key=lambda x: x[1])
+                cat_escolhida, _, pct_ideal, saldo_cat = categorias_defasadas[0]
+
+                valor_necessario = calcular_valor_para_atingir_ideal(
+                    saldo_categoria=saldo_cat,
+                    saldo_total=saldo_total_simulado,
+                    percentual_ideal=pct_ideal
+                )
+
+                if valor_necessario <= 0.000001:
+                    break
+
+                aporte_categoria = min(valor_necessario, restante)
+
+                distribuicao[cat_escolhida] += aporte_categoria
+                saldos_simulados[cat_escolhida] += aporte_categoria
+                saldo_total_simulado += aporte_categoria
+                restante -= aporte_categoria
+
+            # Atualiza a UI
+            for dados_linha in entradas.values():
+                categoria = dados_linha["ent_cat"].get().strip()
+                valor = distribuicao.get(categoria, 0.0)
+                dados_linha["lbl_aplicar"].configure(text=self.formatar_moeda(valor))
+
+            total_distribuido = valor_aporte - restante
+            lbl_resumo.configure(
+                text=(
+                    f"Distribuição calculada | "
+                    f"Total distribuído: {self.formatar_moeda(total_distribuido)}"
+                    f" | Sobra: {self.formatar_moeda(restante)}"
+                ),
+                text_color="#2FA572" if restante <= 0.009 else "#E67E22"
+            )
+            
+        ent_valor_aplicar.bind("<KeyRelease>", calcular_distribuicao)
+
+        ctk.CTkButton(
+            frame_bottom,
+            text="Calcular Distribuição",
+            command=calcular_distribuicao,
+            fg_color="#2980B9",
+            hover_color="#1F618D"
+        ).grid(row=0, column=2, padx=10, pady=(10, 5), sticky="w")
+
+        # ==========================================================
+        # 5) Salvar carteira ideal
         # ==========================================================
         def salvar():
             nova_carteira = {}
             soma = 0.0
 
-            for r_frame, (e_cat, e_pct, lbl_atual) in entradas.items():
-                c = e_cat.get().strip()
-                p_str = e_pct.get().replace(",", ".").strip()
+            for dados_linha in entradas.values():
+                c = dados_linha["ent_cat"].get().strip()
+                p_str = dados_linha["ent_pct"].get().replace(",", ".").strip()
 
                 if c and p_str:
                     try:
@@ -1907,6 +2124,7 @@ class AppInvest(ctk.CTk):
                         )
                         return
 
+            # Validação amigável
             if abs(soma - 100.0) > 0.01:
                 if not messagebox.askyesno(
                     "Aviso",
