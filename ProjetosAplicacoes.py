@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.11"  # Percentuais atuais na janela de edição de carteira, cálculo de distruição de valor a aplicar.
+VERSAO_ATUAL = "v1.0.12"  # Automação de release, ajuste automático de colunas, exclusão de planilhas e scroll automático.
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -73,9 +73,7 @@ class AppInvest(ctk.CTk):
 
         style = ttk.Style()
         # O padding funciona como (esquerda, topo, direita, baixo)
-        # Aumente os valores de topo e baixo (atualmente 10) se precisar de mais espaço
-        style.configure("Treeview.Heading", padding=(0, 10, 0, 10))
-
+        style.configure("Treeview.Heading", padding=(5, 5))
         self.dados = self.carregar_dados()
 
         self.grid_columnconfigure(0, weight=1)
@@ -403,6 +401,7 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(janela, text="Salvar Preferência", command=salvar).pack(pady=15)
         
+        self.ajustar_tamanho_janela_conteudo(janela, min_w=450)
         # Faz o sistema "esperar" essa janela fechar antes de continuar processando o resto
         self.wait_window(janela)
         
@@ -712,29 +711,44 @@ class AppInvest(ctk.CTk):
 
     def ajustar_larguras_tabela(self, tree):
         """
-        Ajusta a largura das colunas dinamicamente para o maior valor entre:
-        o conteúdo das células ou a maior linha do cabeçalho.
+        Ajusta a largura das colunas dinamicamente para o maior valor entre o conteúdo das células ou a maior linha do cabeçalho.
+        Quebra cabeçalhos com mais de 1 palavra em 2 linhas.
+        Ajusta a largura das outras colunas com base no conteúdo e deixa espaço para a coluna que tem o maior item geral.
         """
-        # Pega a fonte padrão usada pelo sistema para medir os pixels
+        import tkinter.font as tkfont
         fonte = tkfont.nametofont("TkDefaultFont")
         
+        larguras_necessarias = {}
+
         for col in tree["columns"]:
             texto_titulo = tree.heading(col, "text")
             
-            # Quebra o título onde houver \n e pega a largura da maior linha do título
-            larguras_titulo = [fonte.measure(linha) for linha in texto_titulo.split("\n")]
-            largura_maxima = max(larguras_titulo) if larguras_titulo else 0
+            # Removemos as quebras de linha pois o ttk.Treeview não as renderiza corretamente no Windows
+            texto_titulo = texto_titulo.replace("\n", " ")
+            tree.heading(col, text=texto_titulo)
             
-            # Varre todas as linhas de dados daquela coluna para ver se algum valor é maior
+            largura_maxima = fonte.measure(texto_titulo)
+            larguras_necessarias[col] = largura_maxima
+            
+        for col in tree["columns"]:
             for item in tree.get_children(""):
                 valor = str(tree.set(item, col))
                 largura_celula = fonte.measure(valor)
-                if largura_celula > largura_maxima:
-                    largura_maxima = largura_celula
-            
-            # Aplica a largura final com 20 pixels de margem de respiro
-            largura_final = largura_maxima + 20
-            tree.column(col, width=largura_final, minwidth=largura_final)
+                if largura_celula > larguras_necessarias[col]:
+                    larguras_necessarias[col] = largura_celula
+
+        if not larguras_necessarias:
+            return
+
+        coluna_maior_item = max(larguras_necessarias, key=larguras_necessarias.get)
+
+        for col in tree["columns"]:
+            largura_final = larguras_necessarias[col] + 20 
+            if col != coluna_maior_item:
+                tree.column(col, width=largura_final, minwidth=largura_final, stretch=False)
+            else:
+                tree.column(col, width=largura_final, minwidth=largura_final, stretch=True)
+
 
     def redistribuir_saldos_global(self):
         # 1. Trava de segurança
@@ -870,9 +884,11 @@ class AppInvest(ctk.CTk):
         self.label_soma_aportes.pack(side="left", padx=(15, 0))
 
         # NOVA COLUNA ADICIONADA: "meta_atualizada"
-        colunas = ("nome", "fim", "meta", "meta_atualizada", "pv_atual", "saldo_obj", "falta", "aporte_mensal", "aporte_distrib")
+        colunas = ("excluir", "nome", "fim", "meta", "meta_atualizada", "pv_atual", "saldo_obj", "falta", "aporte_mensal", "aporte_distrib")
         self.tree_obj = ttk.Treeview(self.tab_obj, columns=colunas, show='headings')
         
+        self.tree_obj.heading("excluir", text="❌")
+        self.tree_obj.column("excluir", width=30, anchor="center", stretch=False)
         self.tree_obj.heading("nome", text="Objetivo")
         self.tree_obj.heading("fim", text="Prazo Final")
         self.tree_obj.heading("meta", text="Meta Original\n(VF)")
@@ -884,6 +900,7 @@ class AppInvest(ctk.CTk):
         self.tree_obj.heading("aporte_distrib", text="Aporte\nDistribuído")
 
         self.tree_obj.bind("<Double-1>", self.on_double_click_obj)
+        self.tree_obj.bind("<ButtonRelease-1>", self.on_click_excluir_obj)
         self.tree_obj.pack(side="top", expand=True, fill="both")
 
     def setup_tabela_aplicacoes(self):
@@ -894,17 +911,20 @@ class AppInvest(ctk.CTk):
         self.label_sugestao = ctk.CTkLabel(self.frame_top_app, text="Sugestão para aplicar em: -", font=("Roboto", 14, "bold"), text_color="#E74C3C")
         self.label_sugestao.pack(side="left", padx=10)
         
-        self.btn_editar_carteira = ctk.CTkButton(self.frame_top_app, text="Editar Percentuais ⚙️", command=self.abrir_janela_editar_carteira, width=140)
+        self.btn_editar_carteira = ctk.CTkButton(self.frame_top_app, text="Carteira Ideal ⚙️", command=self.abrir_janela_editar_carteira, width=140)
         self.btn_editar_carteira.pack(side="right", padx=10)
 
         # Tabela com coluna Tipo
-        colunas = ("nome", "tipo", "valor_atual") 
+        colunas = ("excluir", "nome", "tipo", "valor_atual") 
         self.tree_app = ttk.Treeview(self.tab_app, columns=colunas, show='headings')
+        self.tree_app.heading("excluir", text="❌")
+        self.tree_app.column("excluir", width=30, anchor="center", stretch=False)
         self.tree_app.heading("nome", text="Aplicação")
         self.tree_app.heading("tipo", text="Categoria")
         self.tree_app.heading("valor_atual", text="Saldo Atual (R$)")
         
         self.tree_app.bind("<Double-1>", self.on_double_click_app)
+        self.tree_app.bind("<ButtonRelease-1>", self.on_click_excluir_app)
         self.tree_app.pack(expand=True, fill="both", pady=(0, 10)) 
 
         # --- Frame de rodapé da aba de aplicações (AGORA SÓ COM A TIR) ---
@@ -975,7 +995,7 @@ class AppInvest(ctk.CTk):
             else:
                 saldos_por_categoria["Outros"] += saldo_app
                 
-            self.tree_app.insert("", "end", values=(nome_app, tipo_app, self.formatar_moeda(saldo_app)))
+            self.tree_app.insert("", "end", values=("❌", nome_app, tipo_app, self.formatar_moeda(saldo_app)))
 
         self.label_saldo_total.configure(text=f"Saldo Total: {self.formatar_moeda(saldo_geral_app)}")
 
@@ -1086,7 +1106,7 @@ class AppInvest(ctk.CTk):
             })
         
         self.ajustar_larguras_tabela(self.tree_app)
-        self.ajustar_larguras_tabela(self.tree_obj)
+        # self.ajustar_larguras_tabela(self.tree_obj) # Movido para depois da inserção
         self.label_total_aplicar.configure(text=f"Montante em Objetivos: {self.formatar_moeda(saldo_geral_obj)}")
 
         if hasattr(self, 'label_soma_aportes'):
@@ -1138,6 +1158,7 @@ class AppInvest(ctk.CTk):
         for obj in objetivos_calc:
             distribuido = self.distribuicao_atual.get(obj["nome"], 0.0)
             self.tree_obj.insert("", "end", values=(
+                "❌",
                 obj["nome"], obj["fim"], 
                 self.formatar_moeda(obj["meta"]), 
                 self.formatar_moeda(obj["meta_atualizada"]),
@@ -1147,6 +1168,8 @@ class AppInvest(ctk.CTk):
                 self.formatar_moeda(obj["pmt"]),
                 self.formatar_moeda(distribuido)
             ))
+
+        self.ajustar_larguras_tabela(self.tree_obj)
 
     def fazer_aportes_distribuidos(self):
         if not hasattr(self, 'distribuicao_atual') or not self.distribuicao_atual:
@@ -1160,7 +1183,7 @@ class AppInvest(ctk.CTk):
                 ativo_atual = self.dados["objetivos"][nome].get("outros_ativos", 0.0)
                 
                 # Injeta a movimentação no histórico
-                self.dados["objetivos"][nome]["movimentos"].append((data_hoje, "Aporte (Dinheiro)", valor, ativo_atual))
+                self.dados["objetivos"][nome]["movimentos"].append((data_hoje, "Aporte (Dinheiro)", valor, ativo_atual, "Redistribuição Automática"))
                 # Atualiza o saldo do objetivo
                 self.dados["objetivos"][nome]["saldo"] += valor
                 teve_aporte = True
@@ -1188,6 +1211,33 @@ class AppInvest(ctk.CTk):
         janela.grab_set()        
         return janela
 
+    def ajustar_tamanho_janela_conteudo(self, janela, min_w=None, min_h=None):
+        janela.update_idletasks()
+        
+        w = janela.winfo_reqwidth()
+        h = janela.winfo_reqheight()
+        
+        if min_w and w < min_w: w = min_w
+        if min_h and h < min_h: h = min_h
+        
+        screen_w = janela.winfo_screenwidth()
+        screen_h = janela.winfo_screenheight()
+        if w > screen_w - 50: w = screen_w - 50
+        if h > screen_h - 80: h = screen_h - 80
+        
+        x_pai = self.winfo_rootx()
+        y_pai = self.winfo_rooty()
+        larg_pai = self.winfo_width()
+        alt_pai = self.winfo_height()
+        
+        pos_x = x_pai + (larg_pai // 2) - (w // 2)
+        pos_y = y_pai + (alt_pai // 2) - (h // 2)
+        
+        if pos_y < 30: pos_y = 30
+        if pos_x < 0: pos_x = 0
+        
+        janela.geometry(f"{int(w)}x{int(h)}+{int(pos_x)}+{int(pos_y)}")
+
     # --- JANELAS DE INSERÇÃO ---
 
     def abrir_janela_objetivo(self, nome_preenchido=""):
@@ -1212,7 +1262,8 @@ class AppInvest(ctk.CTk):
         ctk.CTkLabel(frame_info, text="Data Início (DD/MM/AAAA):").grid(row=2, column=0, padx=10, pady=(10,0), sticky="w")
         frame_inicio = ctk.CTkFrame(frame_info, fg_color="transparent")
         frame_inicio.grid(row=3, column=0, padx=10, pady=5, sticky="w")
-        ent_inicio = ctk.CTkEntry(frame_inicio, width=210)
+        ent_inicio = ctk.CTkEntry(frame_inicio, width=130)
+        ent_inicio.insert(0, datetime.now().strftime("%d/%m/%Y"))
         ent_inicio.pack(side="left", padx=(0,2))
         self.configurar_entrada_data(ent_inicio)
         self.criar_datepicker(frame_inicio, ent_inicio).pack(side="left")
@@ -1220,7 +1271,8 @@ class AppInvest(ctk.CTk):
         ctk.CTkLabel(frame_info, text="Data Fim (DD/MM/AAAA):").grid(row=2, column=1, padx=10, pady=(10,0), sticky="w")
         frame_fim = ctk.CTkFrame(frame_info, fg_color="transparent")
         frame_fim.grid(row=3, column=1, padx=10, pady=5, sticky="w")
-        ent_fim = ctk.CTkEntry(frame_fim, width=210)
+        ent_fim = ctk.CTkEntry(frame_fim, width=130)
+        ent_fim.insert(0, datetime.now().strftime("%d/%m/%Y"))
         ent_fim.pack(side="left", padx=(0,2))
         self.configurar_entrada_data(ent_fim)
         self.criar_datepicker(frame_fim, ent_fim).pack(side="left")
@@ -1304,7 +1356,9 @@ class AppInvest(ctk.CTk):
         # --- CARREGAR DADOS DO BANCO ---
         if nome_preenchido in self.dados["objetivos"]:
             info = self.dados["objetivos"][nome_preenchido]
+            ent_inicio.delete(0, 'end')
             ent_inicio.insert(0, info.get("inicio", ""))
+            ent_fim.delete(0, 'end')
             ent_fim.insert(0, info.get("fim", ""))
             
             meta_banco = info.get("meta", info.get("montante", 0))
@@ -1364,25 +1418,30 @@ class AppInvest(ctk.CTk):
         # --- FRAME DE MOVIMENTOS ---
         frame_mov = ctk.CTkFrame(janela)
         frame_mov.pack(padx=20, pady=10, fill="x")
-        for i in range(4): frame_mov.grid_columnconfigure(i, weight=1)
+        for i in range(5): frame_mov.grid_columnconfigure(i, weight=1)
 
         ctk.CTkLabel(frame_mov, text="Data", font=("Roboto", 12)).grid(row=0, column=0, padx=5, pady=(10, 0))
-        ctk.CTkLabel(frame_mov, text="Valor Lançado (R$)", font=("Roboto", 12)).grid(row=0, column=1, padx=5, pady=(10, 0))
-        ctk.CTkLabel(frame_mov, text="Tipo de Movimento", font=("Roboto", 12)).grid(row=0, column=2, padx=5, pady=(10, 0))
+        ctk.CTkLabel(frame_mov, text="Descrição", font=("Roboto", 12)).grid(row=0, column=1, padx=5, pady=(10, 0))
+        ctk.CTkLabel(frame_mov, text="Valor Lançado (R$)", font=("Roboto", 12)).grid(row=0, column=2, padx=5, pady=(10, 0))
+        ctk.CTkLabel(frame_mov, text="Tipo de Movimento", font=("Roboto", 12)).grid(row=0, column=3, padx=5, pady=(10, 0))
 
         frame_data_mov = ctk.CTkFrame(frame_mov, fg_color="transparent")
         frame_data_mov.grid(row=1, column=0, padx=5, pady=(0, 15))
         ent_data = ctk.CTkEntry(frame_data_mov, placeholder_text="DD/MM/AAAA", width=90)
+        ent_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
         ent_data.pack(side="left", padx=(0,2))
         self.configurar_entrada_data(ent_data)
         self.criar_datepicker(frame_data_mov, ent_data).pack(side="left")
         
+        ent_desc_mov = ctk.CTkEntry(frame_mov, placeholder_text="Ex: Troca de Óleo", width=140)
+        ent_desc_mov.grid(row=1, column=1, padx=5, pady=(0, 15))
+
         ent_valor = ctk.CTkEntry(frame_mov, width=110)
-        ent_valor.grid(row=1, column=1, padx=5, pady=(0, 15))
+        ent_valor.grid(row=1, column=2, padx=5, pady=(0, 15))
         self.configurar_entrada_moeda(ent_valor)
         
         tipo_mov = ctk.CTkComboBox(frame_mov, values=["Aporte (Dinheiro)", "Resgate (Dinheiro)", "Atualizar Ativo"], width=160)
-        tipo_mov.grid(row=1, column=2, padx=5, pady=(0, 15))
+        tipo_mov.grid(row=1, column=3, padx=5, pady=(0, 15))
 
         def adicionar_movimento():
             nome = atualizar_dict_objetivo()
@@ -1391,6 +1450,7 @@ class AppInvest(ctk.CTk):
                 return
 
             data = ent_data.get().strip()
+            desc = ent_desc_mov.get().strip()
             valor_float = self.converter_moeda_para_float(ent_valor.get())
             
             valor_ativo_float = calcular_total_ativos()
@@ -1408,33 +1468,40 @@ class AppInvest(ctk.CTk):
                 valor_exibicao = valor_float
 
             self.dados["objetivos"][nome]["saldo"] += valor_exibicao
-            self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float))
+            self.dados["objetivos"][nome]["movimentos"].append((data, tipo, valor_exibicao, valor_ativo_float, desc))
             self.salvar_dados()
             
             saldo_atualizado = self.dados["objetivos"][nome]["saldo"]
-            tree_movs.insert("", "end", values=(data, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
+            tree_movs.insert("", "end", values=(data, desc, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
             self.atualizar_tabelas_principais()
+            if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
             ent_data.delete(0, 'end')
+            ent_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
+            ent_desc_mov.delete(0, 'end')
             ent_valor.delete(0, 'end')
 
         btn_add = ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=90, command=adicionar_movimento)
-        btn_add.grid(row=1, column=3, padx=5, pady=(0, 15))
+        btn_add.grid(row=1, column=4, padx=5, pady=(0, 15))
 
         # --- TABELA DE MOVIMENTOS ---
-        colunas_mov = ("data", "tipo", "valor", "valor_ativo", "montante")
+        colunas_mov = ("excluir", "data", "desc", "tipo", "valor", "valor_ativo", "montante")
         tree_movs = ttk.Treeview(janela, columns=colunas_mov, show='headings', height=6)
+        tree_movs.heading("excluir", text="❌")
         tree_movs.heading("data", text="Data")
+        tree_movs.heading("desc", text="Descrição")
         tree_movs.heading("tipo", text="Tipo")
         tree_movs.heading("valor", text="Valor Lançado")
         tree_movs.heading("valor_ativo", text="Soma dos Ativos")
         tree_movs.heading("montante", text="Montante do Objetivo") 
         
-        tree_movs.column("data", width=90, anchor="center")
-        tree_movs.column("tipo", width=140, anchor="w")
-        tree_movs.column("valor", width=110, anchor="e")
-        tree_movs.column("valor_ativo", width=110, anchor="e")
-        tree_movs.column("montante", width=120, anchor="e")
+        tree_movs.column("excluir", width=30, anchor="center", stretch=False)
+        tree_movs.column("data", width=80, anchor="center")
+        tree_movs.column("desc", width=140, anchor="w")
+        tree_movs.column("tipo", width=130, anchor="w")
+        tree_movs.column("valor", width=100, anchor="e")
+        tree_movs.column("valor_ativo", width=100, anchor="e")
+        tree_movs.column("montante", width=110, anchor="e")
         tree_movs.pack(padx=20, pady=5, fill="both", expand=True)
 
         def remover_movimento():
@@ -1460,8 +1527,17 @@ class AppInvest(ctk.CTk):
                 self.abrir_janela_objetivo(nome)
                 self.atualizar_tabelas_principais()
 
-        btn_remover_mov = ctk.CTkButton(janela, text="Remover Movimento Selecionado", fg_color="#C0392B", command=remover_movimento)
-        btn_remover_mov.pack(pady=5)
+        def on_click_excluir_mov(event):
+            region = tree_movs.identify("region", event.x, event.y)
+            if region == "cell":
+                col = tree_movs.identify_column(event.x)
+                if col == '#1':
+                    item = tree_movs.identify_row(event.y)
+                    if item:
+                        tree_movs.selection_set(item)
+                        remover_movimento()
+
+        tree_movs.bind("<ButtonRelease-1>", on_click_excluir_mov)
 
         if nome_preenchido in self.dados["objetivos"]:
             saldo_acumulado = 0.0
@@ -1469,13 +1545,20 @@ class AppInvest(ctk.CTk):
                 saldo_acumulado += mov[2] 
                 
                 valor_ativo_historico = mov[3] if len(mov) > 3 else 0.0 
+                desc_historico = mov[4] if len(mov) > 4 else ""
                 montante_total = saldo_acumulado + valor_ativo_historico
 
                 val_lancado = self.formatar_moeda(mov[2])
                 val_ativo_formatado = self.formatar_moeda(valor_ativo_historico) if len(mov) > 3 else "-" 
                 val_montante = self.formatar_moeda(montante_total)
                 
-                tree_movs.insert("", "end", values=(mov[0], mov[1], val_lancado, val_ativo_formatado, val_montante))
+                tree_movs.insert("", "end", values=("❌", mov[0], desc_historico, mov[1], val_lancado, val_ativo_formatado, val_montante))
+
+            children = tree_movs.get_children()
+            if children:
+                tree_movs.see(children[-1])
+                
+        if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
         def salvar_tudo_e_fechar():
             try:
@@ -1491,16 +1574,7 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_botoes_obj, text="Salvar Informações e Fechar", command=salvar_tudo_e_fechar).pack(side="left", padx=10)
 
-        def excluir_objetivo():
-            if messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir o objetivo '{nome_preenchido}' e todo o seu histórico?", parent=janela):
-                if nome_preenchido in self.dados["objetivos"]:
-                    del self.dados["objetivos"][nome_preenchido]
-                    self.salvar_dados()
-                    self.atualizar_tabelas_principais()
-                    janela.destroy()
-
-        if nome_preenchido in self.dados["objetivos"]:
-            ctk.CTkButton(frame_botoes_obj, text="Excluir Objetivo (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_objetivo).pack(side="right", padx=10)
+        self.ajustar_tamanho_janela_conteudo(janela, min_w=850)
             
     def abrir_janela_aplicacao(self, nome_preenchido=""):
         # 3. Aumentei a altura da janela para 700 para os botões não ficarem espremidos
@@ -1572,6 +1646,7 @@ class AppInvest(ctk.CTk):
         frame_data.grid(row=0, column=0, padx=5, pady=15)
         
         ent_data = ctk.CTkEntry(frame_data, placeholder_text="DD/MM/AAAA", width=90)
+        ent_data.insert(0, datetime.now().strftime("%d/%m/%Y"))
         ent_data.pack(side="left", padx=(0,2))
         self.configurar_entrada_data(ent_data) 
         
@@ -1680,6 +1755,7 @@ class AppInvest(ctk.CTk):
             ))
             
             self.atualizar_tabelas_principais()
+            if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
             lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_momento)}")
 
             ent_valor.delete(0, 'end')
@@ -1688,7 +1764,9 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=100, command=adicionar_movimento).grid(row=0, column=4, padx=5, pady=15)
 
-        tree_movs = ttk.Treeview(janela, columns=("data", "tipo", "valor", "saldo"), show='headings', height=10)
+        tree_movs = ttk.Treeview(janela, columns=("excluir", "data", "tipo", "valor", "saldo"), show='headings', height=10)
+        tree_movs.heading("excluir", text="❌")
+        tree_movs.column("excluir", width=30, anchor="center", stretch=False)
         tree_movs.heading("data", text="Data")
         tree_movs.heading("tipo", text="Tipo")
         tree_movs.heading("valor", text="Valor")
@@ -1716,13 +1794,22 @@ class AppInvest(ctk.CTk):
                 lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(novo_saldo)}")
                 self.atualizar_tabelas_principais()
 
-        btn_del_mov = ctk.CTkButton(janela, text="Excluir Lançamento Selecionado", fg_color="#C0392B", command=remover_movimento_app)
-        btn_del_mov.pack(pady=5)
+        def on_click_excluir_mov_app(event):
+            region = tree_movs.identify("region", event.x, event.y)
+            if region == "cell":
+                col = tree_movs.identify_column(event.x)
+                if col == '#1':
+                    item = tree_movs.identify_row(event.y)
+                    if item:
+                        tree_movs.selection_set(item)
+                        remover_movimento_app()
+
+        tree_movs.bind("<ButtonRelease-1>", on_click_excluir_mov_app)
 
         if nome_preenchido in self.dados["aplicacoes"]:
             for mov in self.dados["aplicacoes"][nome_preenchido]["movimentos"]:
                 sd_hist = mov[3] if len(mov) > 3 else 0.0
-                tree_movs.insert("", "end", values=(mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
+                tree_movs.insert("", "end", values=("❌", mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
         
         if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
@@ -1759,28 +1846,48 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_botoes, text="Salvar Informações e Fechar", command=fechar_e_salvar).pack(side="left", padx=10)
 
-        def excluir_aplicacao():
-            if messagebox.askyesno("Confirmar Exclusão", f"Tem certeza que deseja excluir a aplicação '{nome_preenchido}'?", parent=janela):
-                if nome_preenchido in self.dados["aplicacoes"]:
-                    del self.dados["aplicacoes"][nome_preenchido]
-                    self.salvar_dados()
-                    self.atualizar_tabelas_principais()
-                    janela.destroy()
+        self.ajustar_tamanho_janela_conteudo(janela, min_w=750)
 
-        if nome_preenchido in self.dados["aplicacoes"]:
-            ctk.CTkButton(frame_botoes, text="Excluir Aplicação (Tudo) 🗑️", fg_color="#E74C3C", hover_color="#C0392B", command=excluir_aplicacao).pack(side="right", padx=10)
 
     def on_double_click_app(self, event):
         selecao = self.tree_app.selection()
         if not selecao: return
-        nome = self.tree_app.item(selecao[0], "values")[0]
+        nome = self.tree_app.item(selecao[0], "values")[1]
         self.abrir_janela_aplicacao(nome)
 
     def on_double_click_obj(self, event):
         selecao = self.tree_obj.selection()
         if not selecao: return
-        nome = self.tree_obj.item(selecao[0], "values")[0]
+        nome = self.tree_obj.item(selecao[0], "values")[1]
         self.abrir_janela_objetivo(nome)
+
+    def on_click_excluir_obj(self, event):
+        region = self.tree_obj.identify("region", event.x, event.y)
+        if region == "cell":
+            col = self.tree_obj.identify_column(event.x)
+            if col == '#1':
+                item = self.tree_obj.identify_row(event.y)
+                if item:
+                    nome = self.tree_obj.item(item, "values")[1]
+                    if messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir o objetivo '{nome}'?\nIsso apagará o objetivo e todo seu histórico."):
+                        if nome in self.dados.get("objetivos", {}):
+                            del self.dados["objetivos"][nome]
+                            self.salvar_dados()
+                            self.atualizar_tabelas_principais()
+
+    def on_click_excluir_app(self, event):
+        region = self.tree_app.identify("region", event.x, event.y)
+        if region == "cell":
+            col = self.tree_app.identify_column(event.x)
+            if col == '#1':
+                item = self.tree_app.identify_row(event.y)
+                if item:
+                    nome = self.tree_app.item(item, "values")[1]
+                    if messagebox.askyesno("Confirmar", f"Tem certeza que deseja excluir a aplicação '{nome}'?\nIsso apagará a aplicação e todo seu histórico."):
+                        if nome in self.dados.get("aplicacoes", {}):
+                            del self.dados["aplicacoes"][nome]
+                            self.salvar_dados()
+                            self.atualizar_tabelas_principais()
 
     def abrir_janela_editar_carteira(self):
         janela = self.criar_janela_secundaria("Editar Carteira Ideal", 930, 720)
@@ -2146,6 +2253,7 @@ class AppInvest(ctk.CTk):
             command=salvar
         ).pack(pady=10)
 
+        self.ajustar_tamanho_janela_conteudo(janela, min_w=930)
 if __name__ == "__main__":
     app = AppInvest()
     app.mainloop()

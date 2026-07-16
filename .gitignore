@@ -1,0 +1,7 @@
+build/
+dist/
+__pycache__/
+*.spec
+github_token.txt
+.env
+publicar_versao.py
