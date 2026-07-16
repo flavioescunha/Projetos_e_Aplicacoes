@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.0.12"  # Automação de release, ajuste automático de colunas, exclusão de planilhas e scroll automático.
+VERSAO_ATUAL = "v1.1.0"  # v1.0.12: Melhorias de interface, automacoes e processo de release |  | - Automacao de descricao e rolagem (scroll) automatico. | - Automacao de exclusao de planilhas. | - Ajuste automatico do tamanho das colunas nas tabelas. | - Automacao do processo de release e versionamento Git (script publicar_versao.py).
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
