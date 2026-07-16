@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.0"  # v1.0.12: Melhorias de interface, automacoes e processo de release |  | - Automacao de descricao e rolagem (scroll) automatico. | - Automacao de exclusao de planilhas. | - Ajuste automatico do tamanho das colunas nas tabelas. | - Automacao do processo de release e versionamento Git (script publicar_versao.py).
+VERSAO_ATUAL = "v1.1.1"  # 🚀 NOVIDADES E MELHORIAS - VERSÃO RECENTE 🚀 |  | ✨ O que há de novo: | 📈 TIR Individual por Aplicação: Agora, ao abrir a janela de gerenciamento de uma aplicação específica, você verá a Rentabilidade (TIR % a.a.) calculada exclusivamente para ela, logo abaixo do Saldo Atual! O valor atualiza em tempo real ao adicionar ou remover movimentações. |  | 🛠️ Correções e Ajustes Visuais: | 📏 Alinhamento Perfeito: Corrigimos um bug irritante onde os dados da tabela de histórico ficavam desalinhados (puxados para a esquerda) ao inserir um novo registro nas janelas de Objetivos e Aplicações. | 🎨 Interface Mais Limpa: Demos adeus àquele emoji de "❌" grande e vermelho nas tabelas! Ele foi substituído por um "x" mais discreto, moderno e alinhado ao padrão de cores do aplicativo. |  | ✅ Como sempre, seguimos trabalhando para deixar o gerenciamento dos seus investimentos cada vez mais preciso e agradável aos olhos!
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -571,7 +571,52 @@ class AppInvest(ctk.CTk):
         except Exception as e:
             print(f"❌ ERRO MATEMÁTICO NO XIRR: {e}")
             return 0.0
-        
+
+    def calcular_tir_aplicacao(self, nome_app):
+        from datetime import datetime
+        fluxo_caixa = []
+        hoje = datetime.now()
+        app_info = self.dados.get("aplicacoes", {}).get(nome_app)
+        if not app_info:
+            return 0.0
+        saldo_app = app_info.get("saldo", 0.0)
+        movimentos = app_info.get("movimentos", [])
+        movimentos_processados = []
+        for mov in movimentos:
+            if len(mov) >= 3:
+                data_str = mov[0]
+                desc = str(mov[1]).lower()
+                valor = float(mov[2])
+                try:
+                    data_mov = datetime.strptime(data_str, "%d/%m/%Y")
+                    movimentos_processados.append({'data': data_mov, 'desc': desc, 'valor': valor})
+                except ValueError:
+                    continue
+        movimentos_processados.sort(key=lambda x: x['data'])
+        for i, mov in enumerate(movimentos_processados):
+            valor_absoluto = abs(mov['valor'])
+            if i == 0:
+                fluxo_caixa.append((mov['data'], -valor_absoluto))
+                continue 
+            if "aporte" in mov['desc'] or "compra" in mov['desc'] or "depósito" in mov['desc'] or "deposito" in mov['desc']:
+                fluxo_caixa.append((mov['data'], -valor_absoluto))
+            elif "saque" in mov['desc'] or "venda" in mov['desc'] or "resgate" in mov['desc']:
+                fluxo_caixa.append((mov['data'], valor_absoluto))
+        if saldo_app > 0:
+            fluxo_caixa.append((hoje, saldo_app))
+        tem_positivo = False
+        tem_negativo = False
+        fluxo_caixa.sort(key=lambda x: x[0])
+        for data, valor in fluxo_caixa:
+            if valor > 0: tem_positivo = True
+            if valor < 0: tem_negativo = True
+        if not fluxo_caixa or not tem_positivo or not tem_negativo:
+            return 0.0
+        try:
+            return self.calcular_xirr(fluxo_caixa) * 100
+        except Exception:
+            return 0.0
+
 
     def corrigir_valor_pela_inflacao(self, valor_inicial, data_inicial_str):
         """
@@ -887,7 +932,7 @@ class AppInvest(ctk.CTk):
         colunas = ("excluir", "nome", "fim", "meta", "meta_atualizada", "pv_atual", "saldo_obj", "falta", "aporte_mensal", "aporte_distrib")
         self.tree_obj = ttk.Treeview(self.tab_obj, columns=colunas, show='headings')
         
-        self.tree_obj.heading("excluir", text="❌")
+        self.tree_obj.heading("excluir", text="x")
         self.tree_obj.column("excluir", width=30, anchor="center", stretch=False)
         self.tree_obj.heading("nome", text="Objetivo")
         self.tree_obj.heading("fim", text="Prazo Final")
@@ -917,7 +962,7 @@ class AppInvest(ctk.CTk):
         # Tabela com coluna Tipo
         colunas = ("excluir", "nome", "tipo", "valor_atual") 
         self.tree_app = ttk.Treeview(self.tab_app, columns=colunas, show='headings')
-        self.tree_app.heading("excluir", text="❌")
+        self.tree_app.heading("excluir", text="x")
         self.tree_app.column("excluir", width=30, anchor="center", stretch=False)
         self.tree_app.heading("nome", text="Aplicação")
         self.tree_app.heading("tipo", text="Categoria")
@@ -995,7 +1040,7 @@ class AppInvest(ctk.CTk):
             else:
                 saldos_por_categoria["Outros"] += saldo_app
                 
-            self.tree_app.insert("", "end", values=("❌", nome_app, tipo_app, self.formatar_moeda(saldo_app)))
+            self.tree_app.insert("", "end", values=("x", nome_app, tipo_app, self.formatar_moeda(saldo_app)))
 
         self.label_saldo_total.configure(text=f"Saldo Total: {self.formatar_moeda(saldo_geral_app)}")
 
@@ -1158,7 +1203,7 @@ class AppInvest(ctk.CTk):
         for obj in objetivos_calc:
             distribuido = self.distribuicao_atual.get(obj["nome"], 0.0)
             self.tree_obj.insert("", "end", values=(
-                "❌",
+                "x",
                 obj["nome"], obj["fim"], 
                 self.formatar_moeda(obj["meta"]), 
                 self.formatar_moeda(obj["meta_atualizada"]),
@@ -1472,7 +1517,7 @@ class AppInvest(ctk.CTk):
             self.salvar_dados()
             
             saldo_atualizado = self.dados["objetivos"][nome]["saldo"]
-            tree_movs.insert("", "end", values=(data, desc, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
+            tree_movs.insert("", "end", values=("x", data, desc, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
             self.atualizar_tabelas_principais()
             if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
@@ -1487,7 +1532,7 @@ class AppInvest(ctk.CTk):
         # --- TABELA DE MOVIMENTOS ---
         colunas_mov = ("excluir", "data", "desc", "tipo", "valor", "valor_ativo", "montante")
         tree_movs = ttk.Treeview(janela, columns=colunas_mov, show='headings', height=6)
-        tree_movs.heading("excluir", text="❌")
+        tree_movs.heading("excluir", text="x")
         tree_movs.heading("data", text="Data")
         tree_movs.heading("desc", text="Descrição")
         tree_movs.heading("tipo", text="Tipo")
@@ -1552,7 +1597,7 @@ class AppInvest(ctk.CTk):
                 val_ativo_formatado = self.formatar_moeda(valor_ativo_historico) if len(mov) > 3 else "-" 
                 val_montante = self.formatar_moeda(montante_total)
                 
-                tree_movs.insert("", "end", values=("❌", mov[0], desc_historico, mov[1], val_lancado, val_ativo_formatado, val_montante))
+                tree_movs.insert("", "end", values=("x", mov[0], desc_historico, mov[1], val_lancado, val_ativo_formatado, val_montante))
 
             children = tree_movs.get_children()
             if children:
@@ -1748,6 +1793,7 @@ class AppInvest(ctk.CTk):
             self.salvar_dados()
             
             tree_movs.insert("", "end", values=(
+                "x",
                 data, 
                 tipo, 
                 self.formatar_moeda(valor_exibicao), 
@@ -1757,6 +1803,8 @@ class AppInvest(ctk.CTk):
             self.atualizar_tabelas_principais()
             if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
             lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_momento)}")
+            tir_app = self.calcular_tir_aplicacao(nome)
+            lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
 
             ent_valor.delete(0, 'end')
             ent_saldo.delete(0, 'end')
@@ -1765,7 +1813,7 @@ class AppInvest(ctk.CTk):
         ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=100, command=adicionar_movimento).grid(row=0, column=4, padx=5, pady=15)
 
         tree_movs = ttk.Treeview(janela, columns=("excluir", "data", "tipo", "valor", "saldo"), show='headings', height=10)
-        tree_movs.heading("excluir", text="❌")
+        tree_movs.heading("excluir", text="x")
         tree_movs.column("excluir", width=30, anchor="center", stretch=False)
         tree_movs.heading("data", text="Data")
         tree_movs.heading("tipo", text="Tipo")
@@ -1792,6 +1840,8 @@ class AppInvest(ctk.CTk):
                 tree_movs.delete(selecionado)
                 novo_saldo = self.dados["aplicacoes"][nome]["saldo"]
                 lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(novo_saldo)}")
+                tir_app = self.calcular_tir_aplicacao(nome)
+                lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
                 self.atualizar_tabelas_principais()
 
         def on_click_excluir_mov_app(event):
@@ -1809,15 +1859,24 @@ class AppInvest(ctk.CTk):
         if nome_preenchido in self.dados["aplicacoes"]:
             for mov in self.dados["aplicacoes"][nome_preenchido]["movimentos"]:
                 sd_hist = mov[3] if len(mov) > 3 else 0.0
-                tree_movs.insert("", "end", values=("❌", mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
+                tree_movs.insert("", "end", values=("x", mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
         
         if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
-        lbl_saldo_rodape = ctk.CTkLabel(janela, text="Saldo Atual: R$ 0,00", font=("Roboto", 18, "bold"), text_color="#2FA572")
-        lbl_saldo_rodape.pack(pady=(10, 0))
+        frame_rodape = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_rodape.pack(pady=(10, 0))
+
+        lbl_saldo_rodape = ctk.CTkLabel(frame_rodape, text="Saldo Atual: R$ 0,00", font=("Roboto", 18, "bold"), text_color="#2FA572")
+        lbl_saldo_rodape.pack()
+        
+        lbl_tir_rodape = ctk.CTkLabel(frame_rodape, text="TIR: 0.00% a.a.", font=("Roboto", 14, "bold"), text_color="#27AE60")
+        lbl_tir_rodape.pack()
         
         if nome_preenchido in self.dados.get("aplicacoes", {}):
-            lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(self.dados['aplicacoes'][nome_preenchido].get('saldo', 0.0))}")
+            saldo = self.dados['aplicacoes'][nome_preenchido].get('saldo', 0.0)
+            lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo)}")
+            tir_app = self.calcular_tir_aplicacao(nome_preenchido)
+            lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
 
         frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
         frame_botoes.pack(pady=15)
