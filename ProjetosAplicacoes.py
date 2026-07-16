@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.1"  # 🚀 NOVIDADES E MELHORIAS - VERSÃO RECENTE 🚀 |  | ✨ O que há de novo: | 📈 TIR Individual por Aplicação: Agora, ao abrir a janela de gerenciamento de uma aplicação específica, você verá a Rentabilidade (TIR % a.a.) calculada exclusivamente para ela, logo abaixo do Saldo Atual! O valor atualiza em tempo real ao adicionar ou remover movimentações. |  | 🛠️ Correções e Ajustes Visuais: | 📏 Alinhamento Perfeito: Corrigimos um bug irritante onde os dados da tabela de histórico ficavam desalinhados (puxados para a esquerda) ao inserir um novo registro nas janelas de Objetivos e Aplicações. | 🎨 Interface Mais Limpa: Demos adeus àquele emoji de "❌" grande e vermelho nas tabelas! Ele foi substituído por um "x" mais discreto, moderno e alinhado ao padrão de cores do aplicativo. |  | ✅ Como sempre, seguimos trabalhando para deixar o gerenciamento dos seus investimentos cada vez mais preciso e agradável aos olhos!
+VERSAO_ATUAL = "v1.1.2"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Preparamos uma nova atualização recheada de praticidade para você ter ainda mais controle sobre o seu patrimônio. Confira o que mudou! |  | ## 📊 Novos Extratos Inteligentes de Aportes e Aplicações | Perdeu a conta de onde o dinheiro entrou ou saiu neste mês? Não se preocupe mais! |  | Nesta versão, adicionamos os novos botões **"Extrato de Aportes"** (na aba Objetivos) e **"Extrato de Aplicações"** (na aba Aplicações). Com apenas um clique, você ganha uma visão completa do que aconteceu com o seu dinheiro recentemente. |  | ### O que você vai encontrar nos Extratos: | - **Resumo Automático de 30 Dias:** Acompanhe tudo o que foi movimentado nos últimos 30 dias (de hoje para trás). Sem sustos e sem trabalho manual! | - **Ordem Cronológica Perfeita:** A lista exibe seus movimentos do mais antigo para o mais recente, facilitando a compreensão de como seu saldo flutuou ao longo do tempo. | - **Rastreamento de Saldo em Tempo Real:** Uma nova coluna de *Saldo Acumulado* foi adicionada. Agora, você consegue ver o salto no seu saldo *linha a linha*, entendendo o impacto de cada centavo aportado ou resgatado. | - **Feito para sua Comodidade:** Ao abrir, o extrato rola automaticamente para o final, te mostrando de imediato a movimentação mais recente. No rodapé, você terá um raio-x: o **Saldo do Período** e o **Saldo Total**. |  | > [!TIP] | > **Dica de Ouro:** Experimente clicar em "Extrato de Aplicações" para ver como os pequenos aportes e atualizações de rendimentos estão construindo o seu Saldo Total no fim do mês! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -913,6 +913,9 @@ class AppInvest(ctk.CTk):
         self.btn_redistribuir = ctk.CTkButton(self.frame_rodape_obj, text="Redistribuir Saldo Global 🔄", fg_color="#D35400", hover_color="#A04000", command=self.redistribuir_saldos_global)
         self.btn_redistribuir.pack(side="left", padx=(0, 15))
 
+        self.btn_extrato_obj = ctk.CTkButton(self.frame_rodape_obj, text="Extrato de Aportes", fg_color="#8E44AD", hover_color="#732D91", command=lambda: self.abrir_janela_extrato("objetivos"))
+        self.btn_extrato_obj.pack(side="left", padx=(0, 15))
+
         self.label_diferenca = ctk.CTkLabel(
             self.frame_rodape_obj,
             text="Diferença a Distribuir: R$ 0,00",
@@ -984,6 +987,9 @@ class AppInvest(ctk.CTk):
         # NOVO: Botão para alterar a Taxa do PMT
         self.btn_config_taxa = ctk.CTkButton(self.frame_rodape_app, text="⚙️ Taxa PMT", width=110, fg_color="#34495E", hover_color="#2C3E50", command=self.abrir_config_taxa_pmt)
         self.btn_config_taxa.pack(side="right", padx=10)
+
+        self.btn_extrato_app = ctk.CTkButton(self.frame_rodape_app, text="Extrato de Aplicações", fg_color="#8E44AD", hover_color="#732D91", command=lambda: self.abrir_janela_extrato("aplicacoes"))
+        self.btn_extrato_app.pack(side="left", padx=10)
         
     def formatar_moeda(self, valor):
         return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1283,7 +1289,96 @@ class AppInvest(ctk.CTk):
         
         janela.geometry(f"{int(w)}x{int(h)}+{int(pos_x)}+{int(pos_y)}")
 
+    def abrir_janela_extrato(self, tipo="objetivos"):
+        janela = self.criar_janela_secundaria(f"Extrato de {'Aportes (Objetivos)' if tipo == 'objetivos' else 'Aplicações'}", 800, 500)
+        
+        lbl_titulo = ctk.CTkLabel(janela, text=f"Extrato de {'Aportes' if tipo == 'objetivos' else 'Aplicações'} (Últimos 30 Dias)", font=("Roboto", 20, "bold"))
+        lbl_titulo.pack(pady=(10, 5))
+
+        # Colunas
+        colunas = ("data", "nome", "desc", "valor", "saldo")
+        tree = ttk.Treeview(janela, columns=colunas, show='headings')
+        tree.heading("data", text="Data")
+        tree.heading("nome", text="Nome")
+        tree.heading("desc", text="Descrição")
+        tree.heading("valor", text="Valor")
+        tree.heading("saldo", text="Saldo Acumulado (Período)")
+
+        tree.column("data", width=90, anchor="center")
+        tree.column("nome", width=150, anchor="w")
+        tree.column("desc", width=200, anchor="w")
+        tree.column("valor", width=100, anchor="e")
+        tree.column("saldo", width=120, anchor="e")
+
+        tree.pack(expand=True, fill="both", padx=10, pady=5)
+
+        # Preencher os dados
+        movimentos_todos = []
+        # Coletar movimentos
+        for nome_item, dados_item in self.dados.get(tipo, {}).items():
+            for mov in dados_item.get("movimentos", []):
+                if len(mov) >= 3:
+                    data_str, desc, valor = mov[0], mov[1], float(mov[2])
+                    try:
+                        data_dt = datetime.strptime(data_str, "%d/%m/%Y")
+                        movimentos_todos.append({
+                            "data_dt": data_dt,
+                            "data_str": data_str,
+                            "nome": nome_item,
+                            "desc": desc,
+                            "valor": valor
+                        })
+                    except ValueError:
+                        pass 
+
+        # Filtrar os últimos 30 dias, sem datas futuras
+        hoje = datetime.now()
+        trinta_dias_atras = hoje - timedelta(days=30)
+        
+        movs_filtrados = [
+            m for m in movimentos_todos 
+            if trinta_dias_atras.date() <= m["data_dt"].date() <= hoje.date()
+        ]
+
+        # Ordenar do mais antigo para o mais recente (Crescente)
+        movs_filtrados.sort(key=lambda x: x["data_dt"])
+
+        saldo_acumulado = 0.0
+        # Inserir na árvore calculando o saldo acumulado passo a passo
+        for i, m in enumerate(movs_filtrados):
+            saldo_acumulado += m["valor"]
+            valor_formatado = self.formatar_moeda(m["valor"])
+            saldo_formatado = self.formatar_moeda(saldo_acumulado)
+            # Tags para diferenciar valores positivos e negativos
+            tag = "pos" if m["valor"] >= 0 else "neg"
+            tree.insert("", "end", values=(m["data_str"], m["nome"], m["desc"], valor_formatado, saldo_formatado), tags=(tag,))
+        
+        # Colorindo
+        tree.tag_configure("pos", foreground="green")
+        tree.tag_configure("neg", foreground="red")
+
+        # Scroll para o último item inserido
+        children = tree.get_children()
+        if children:
+            tree.see(children[-1])
+
+        # Frame de Rodapé do Extrato
+        frame_rodape = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_rodape.pack(side="bottom", fill="x", padx=10, pady=10)
+
+        saldo_30d = saldo_acumulado
+        
+        # Saldo total (da carteira/objetivos como um todo)
+        saldo_total = sum(d.get("saldo", 0.0) for d in self.dados.get(tipo, {}).values())
+
+        lbl_saldo_30 = ctk.CTkLabel(frame_rodape, text=f"Saldo do Período: {self.formatar_moeda(saldo_30d)}", font=("Roboto", 14, "bold"))
+        lbl_saldo_30.pack(side="left", padx=10)
+
+        lbl_saldo_total = ctk.CTkLabel(frame_rodape, text=f"Saldo Total ({'Objetivos' if tipo == 'objetivos' else 'Aplicações'}): {self.formatar_moeda(saldo_total)}", font=("Roboto", 14, "bold"), text_color="#2FA572")
+        lbl_saldo_total.pack(side="right", padx=10)
+
     # --- JANELAS DE INSERÇÃO ---
+
 
     def abrir_janela_objetivo(self, nome_preenchido=""):
         # Aumentei a altura para 820 para acomodar os comentários
