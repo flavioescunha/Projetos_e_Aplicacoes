@@ -1,1 +1,9 @@
 theme: jekyll-theme-modernist # Ou o nome do seu tema atual
+exclude:
+  - build/
+  - dist/
+  - release/
+  - "*.spec"
+  - "*.exe"
+  - cache_ipca.json
+  - dados_investimentos.json
