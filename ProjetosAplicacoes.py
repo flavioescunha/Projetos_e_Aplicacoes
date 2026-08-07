@@ -1880,27 +1880,11 @@ class AppInvest(ctk.CTk):
             else:
                 valor_exibicao = valor_float
 
-            self.dados["aplicacoes"][nome]["saldo"] += valor_exibicao
-            saldo_momento = self.dados["aplicacoes"][nome]["saldo"]
-
-            novo_movimento = (data, tipo, valor_exibicao, saldo_momento)
+            novo_movimento = (data, tipo, valor_exibicao, 0.0)
             self.dados["aplicacoes"][nome]["movimentos"].append(novo_movimento)
             
-            self.salvar_dados()
-            
-            tree_movs.insert("", "end", values=(
-                "x",
-                data, 
-                tipo, 
-                self.formatar_moeda(valor_exibicao), 
-                self.formatar_moeda(saldo_momento)
-            ))
-            
+            recarregar_tabela_movimentos()
             self.atualizar_tabelas_principais()
-            if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
-            lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_momento)}")
-            tir_app = self.calcular_tir_aplicacao(nome)
-            lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
 
             ent_valor.delete(0, 'end')
             ent_saldo.delete(0, 'end')
@@ -1925,19 +1909,10 @@ class AppInvest(ctk.CTk):
                 nome = atualizar_nome_app()
                 if not nome: return
 
-                # 4. Busca pelo index exato
                 item_index = tree_movs.index(selecionado[0])
-                
-                mov = self.dados["aplicacoes"][nome]["movimentos"][item_index]
-                self.dados["aplicacoes"][nome]["saldo"] -= mov[2]
                 del self.dados["aplicacoes"][nome]["movimentos"][item_index]
                 
-                self.salvar_dados()
-                tree_movs.delete(selecionado)
-                novo_saldo = self.dados["aplicacoes"][nome]["saldo"]
-                lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(novo_saldo)}")
-                tir_app = self.calcular_tir_aplicacao(nome)
-                lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
+                recarregar_tabela_movimentos()
                 self.atualizar_tabelas_principais()
 
         def on_click_excluir_mov_app(event):
@@ -1952,13 +1927,6 @@ class AppInvest(ctk.CTk):
 
         tree_movs.bind("<ButtonRelease-1>", on_click_excluir_mov_app)
 
-        if nome_preenchido in self.dados["aplicacoes"]:
-            for mov in self.dados["aplicacoes"][nome_preenchido]["movimentos"]:
-                sd_hist = mov[3] if len(mov) > 3 else 0.0
-                tree_movs.insert("", "end", values=("x", mov[0], mov[1], self.formatar_moeda(mov[2]), self.formatar_moeda(sd_hist)))
-        
-        if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
-
         frame_rodape = ctk.CTkFrame(janela, fg_color="transparent")
         frame_rodape.pack(pady=(10, 0))
 
@@ -1967,12 +1935,40 @@ class AppInvest(ctk.CTk):
         
         lbl_tir_rodape = ctk.CTkLabel(frame_rodape, text="TIR: 0.00% a.a.", font=("Roboto", 14, "bold"), text_color="#27AE60")
         lbl_tir_rodape.pack()
-        
-        if nome_preenchido in self.dados.get("aplicacoes", {}):
-            saldo = self.dados['aplicacoes'][nome_preenchido].get('saldo', 0.0)
-            lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo)}")
-            tir_app = self.calcular_tir_aplicacao(nome_preenchido)
+
+        def recarregar_tabela_movimentos():
+            for item in tree_movs.get_children():
+                tree_movs.delete(item)
+            nome = atualizar_nome_app()
+            if not nome or nome not in self.dados.get("aplicacoes", {}): return
+            
+            from datetime import datetime
+            movs = self.dados["aplicacoes"][nome].get("movimentos", [])
+            
+            def get_data(m):
+                try: return datetime.strptime(m[0], "%d/%m/%Y")
+                except ValueError: return datetime.min
+            
+            movs.sort(key=get_data)
+            
+            saldo_acum = 0.0
+            novos_movs = []
+            for mov in movs:
+                valor = float(mov[2])
+                saldo_acum += valor
+                novos_movs.append((mov[0], mov[1], valor, saldo_acum))
+                tree_movs.insert("", "end", values=("x", mov[0], mov[1], self.formatar_moeda(valor), self.formatar_moeda(saldo_acum)))
+                
+            self.dados["aplicacoes"][nome]["movimentos"] = novos_movs
+            self.dados["aplicacoes"][nome]["saldo"] = saldo_acum
+            self.salvar_dados()
+            
+            lbl_saldo_rodape.configure(text=f"Saldo Atual: {self.formatar_moeda(saldo_acum)}")
+            tir_app = self.calcular_tir_aplicacao(nome)
             lbl_tir_rodape.configure(text=f"TIR: {tir_app:.2f}% a.a.")
+
+        recarregar_tabela_movimentos()
+        if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
         frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
         frame_botoes.pack(pady=15)
