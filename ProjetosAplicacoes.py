@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.2"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Preparamos uma nova atualização recheada de praticidade para você ter ainda mais controle sobre o seu patrimônio. Confira o que mudou! |  | ## 📊 Novos Extratos Inteligentes de Aportes e Aplicações | Perdeu a conta de onde o dinheiro entrou ou saiu neste mês? Não se preocupe mais! |  | Nesta versão, adicionamos os novos botões **"Extrato de Aportes"** (na aba Objetivos) e **"Extrato de Aplicações"** (na aba Aplicações). Com apenas um clique, você ganha uma visão completa do que aconteceu com o seu dinheiro recentemente. |  | ### O que você vai encontrar nos Extratos: | - **Resumo Automático de 30 Dias:** Acompanhe tudo o que foi movimentado nos últimos 30 dias (de hoje para trás). Sem sustos e sem trabalho manual! | - **Ordem Cronológica Perfeita:** A lista exibe seus movimentos do mais antigo para o mais recente, facilitando a compreensão de como seu saldo flutuou ao longo do tempo. | - **Rastreamento de Saldo em Tempo Real:** Uma nova coluna de *Saldo Acumulado* foi adicionada. Agora, você consegue ver o salto no seu saldo *linha a linha*, entendendo o impacto de cada centavo aportado ou resgatado. | - **Feito para sua Comodidade:** Ao abrir, o extrato rola automaticamente para o final, te mostrando de imediato a movimentação mais recente. No rodapé, você terá um raio-x: o **Saldo do Período** e o **Saldo Total**. |  | > [!TIP] | > **Dica de Ouro:** Experimente clicar em "Extrato de Aplicações" para ver como os pequenos aportes e atualizações de rendimentos estão construindo o seu Saldo Total no fim do mês! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
+VERSAO_ATUAL = "v1.1.3"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, foi implementada a permissão para atualização de saldo com movimento zero. Isso é fundamental para efeitos de cálculo correto da TIR (Taxa Interna de Retorno), permitindo maior precisão na sua análise de investimentos! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1851,9 +1851,10 @@ class AppInvest(ctk.CTk):
             if not data or len(data) < 10:
                 messagebox.showwarning("Aviso", "Preencha a data corretamente (DD/MM/AAAA).")
                 return
-            if valor_float == 0:
-                messagebox.showwarning("Aviso", "O valor do movimento não pode ser zero.")
-                return
+            # Permite movimento zero para cálculo de TIR
+            # if valor_float == 0:
+            #     messagebox.showwarning("Aviso", "O valor do movimento não pode ser zero.")
+            #     return
 
             if nome not in self.dados["aplicacoes"]:
                 self.dados["aplicacoes"][nome] = {
