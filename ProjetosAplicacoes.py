@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.3"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, foi implementada a permissão para atualização de saldo com movimento zero. Isso é fundamental para efeitos de cálculo correto da TIR (Taxa Interna de Retorno), permitindo maior precisão na sua análise de investimentos! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
+VERSAO_ATUAL = "v1.1.4"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, foi corrigido um erro no cálculo do 'Montante do Objetivo' ao registrar ou atualizar um ativo, garantindo que o valor exibido na tabela esteja sempre correto no momento da inserção! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1612,7 +1612,8 @@ class AppInvest(ctk.CTk):
             self.salvar_dados()
             
             saldo_atualizado = self.dados["objetivos"][nome]["saldo"]
-            tree_movs.insert("", "end", values=("x", data, desc, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(saldo_atualizado)))
+            montante_atualizado = saldo_atualizado + valor_ativo_float
+            tree_movs.insert("", "end", values=("x", data, desc, tipo, self.formatar_moeda(valor_exibicao), self.formatar_moeda(valor_ativo_float), self.formatar_moeda(montante_atualizado)))
             self.atualizar_tabelas_principais()
             if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
