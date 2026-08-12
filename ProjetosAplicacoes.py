@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.4"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, foi corrigido um erro no cálculo do 'Montante do Objetivo' ao registrar ou atualizar um ativo, garantindo que o valor exibido na tabela esteja sempre correto no momento da inserção! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
+VERSAO_ATUAL = "v1.1.5"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, implementamos a coluna de TIR na aba de Aplicações e a previsão automática da aplicação mensal (PMT) na edição de objetivos. |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -322,6 +322,7 @@ class AppInvest(ctk.CTk):
             def confirmar_data(event=None):
                 entry_alvo.delete(0, 'end')
                 entry_alvo.insert(0, cal.get_date())
+                entry_alvo.event_generate("<KeyRelease>")
                 top.destroy()
 
             # Faz o duplo clique funcionar também nos widgets internos do calendário
@@ -963,12 +964,14 @@ class AppInvest(ctk.CTk):
         self.btn_editar_carteira.pack(side="right", padx=10)
 
         # Tabela com coluna Tipo
-        colunas = ("excluir", "nome", "tipo", "valor_atual") 
+        colunas = ("excluir", "nome", "tipo", "tir", "valor_atual") 
         self.tree_app = ttk.Treeview(self.tab_app, columns=colunas, show='headings')
         self.tree_app.heading("excluir", text="x")
         self.tree_app.column("excluir", width=30, anchor="center", stretch=False)
         self.tree_app.heading("nome", text="Aplicação")
         self.tree_app.heading("tipo", text="Categoria")
+        self.tree_app.heading("tir", text="TIR (a.a.)")
+        self.tree_app.column("tir", width=80, anchor="center")
         self.tree_app.heading("valor_atual", text="Saldo Atual (R$)")
         
         self.tree_app.bind("<Double-1>", self.on_double_click_app)
@@ -1045,8 +1048,11 @@ class AppInvest(ctk.CTk):
                 saldos_por_categoria[tipo_app] += saldo_app
             else:
                 saldos_por_categoria["Outros"] += saldo_app
+            
+            tir_app = self.calcular_tir_aplicacao(nome_app)
+            tir_app_str = f"{tir_app:.2f}%" if tir_app != 0.0 else "0.00%"
                 
-            self.tree_app.insert("", "end", values=("x", nome_app, tipo_app, self.formatar_moeda(saldo_app)))
+            self.tree_app.insert("", "end", values=("x", nome_app, tipo_app, tir_app_str, self.formatar_moeda(saldo_app)))
 
         self.label_saldo_total.configure(text=f"Saldo Total: {self.formatar_moeda(saldo_geral_app)}")
 
@@ -1432,6 +1438,59 @@ class AppInvest(ctk.CTk):
         lbl_total_ativos.grid(row=6, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="e")
 
         linhas_ativos_ui = []
+        
+        lbl_previsao_pmt = ctk.CTkLabel(frame_info, text="Previsão Mensal (PMT): R$ 0,00", font=("Roboto", 13, "bold"), text_color="#F39C12")
+
+        def calcular_previsao_pmt(*args):
+            try:
+                meta_str = ent_meta.get()
+                meta_original = self.converter_moeda_para_float(meta_str) if meta_str else 0.0
+                inicio_str = ent_inicio.get().strip()
+                meta_atualizada = self.corrigir_valor_pela_inflacao(meta_original, inicio_str) if inicio_str else meta_original
+                fim_str = ent_fim.get().strip()
+                n = self.calcular_meses_restantes(fim_str) if fim_str else 0
+                
+                saldo_atual = 0.0
+                if nome_preenchido in self.dados["objetivos"]:
+                    saldo_atual = self.dados["objetivos"][nome_preenchido].get("saldo", 0.0)
+                
+                total_ativos_loc = 0.0
+                for row in linhas_ativos_ui:
+                    try:
+                        val = self.converter_moeda_para_float(row['ent_val'].get())
+                        total_ativos_loc += val
+                    except: pass
+                
+                pv_base = saldo_atual + total_ativos_loc
+                
+                try:
+                    tir_anual = self.calcular_tir_media_carteira()
+                    tir_mensal = ((1 + (tir_anual / 100)) ** (1/12)) - 1
+                except:
+                    tir_mensal = 0.005
+                
+                config_taxa = self.dados.get("config_taxa_pmt", {"modo": "fixo", "valor": 0.005})
+                if config_taxa["modo"] == "auto":
+                    taxa_pmt = max(tir_mensal, 0.001)
+                else:
+                    taxa_pmt = config_taxa.get("valor", 0.005)
+                
+                falta = max(0, meta_atualizada - pv_base)
+                if falta > 0 and n > 0:
+                    pmt = self.calcular_pmt(pv_base, meta_atualizada, n, taxa_pmt)
+                else:
+                    pmt = 0.0
+                
+                if pmt > 0:
+                    lbl_previsao_pmt.configure(text=f"Previsão Mensal (PMT): {self.formatar_moeda(pmt)}")
+                else:
+                    lbl_previsao_pmt.configure(text="Previsão Mensal (PMT): R$ 0,00 (Atingido!)")
+            except Exception:
+                lbl_previsao_pmt.configure(text="Previsão Mensal (PMT): R$ 0,00")
+
+        ent_meta.bind("<KeyRelease>", calcular_previsao_pmt, add="+")
+        ent_inicio.bind("<KeyRelease>", calcular_previsao_pmt, add="+")
+        ent_fim.bind("<KeyRelease>", calcular_previsao_pmt, add="+")
 
         def calcular_total_ativos(*args):
             total = 0.0
@@ -1441,6 +1500,7 @@ class AppInvest(ctk.CTk):
                     total += val
                 except: pass
             lbl_total_ativos.configure(text=f"Total Outros Ativos: {self.formatar_moeda(total)}")
+            calcular_previsao_pmt()
             return total
 
         def ajustar_altura_scroll():
@@ -1489,7 +1549,10 @@ class AppInvest(ctk.CTk):
         btn_add_ativo.grid(row=7, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="w")
 
         # --- CAMPO: COMENTÁRIOS DA JANELA DE OBJETIVOS ---
-        ctk.CTkLabel(frame_info, text="Comentários / Observações:", font=("Roboto", 12, "bold")).grid(row=8, column=0, columnspan=2, padx=10, pady=(5,0), sticky="w")
+        ctk.CTkLabel(frame_info, text="Comentários / Observações:", font=("Roboto", 12, "bold")).grid(row=8, column=0, padx=10, pady=(5,0), sticky="w")
+        
+        lbl_previsao_pmt.grid(row=8, column=1, padx=10, pady=(5,0), sticky="e")
+        
         txt_comentario_obj = ctk.CTkTextbox(frame_info, height=50)
         txt_comentario_obj.grid(row=9, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
 
@@ -1517,6 +1580,7 @@ class AppInvest(ctk.CTk):
                 adicionar_linha_ativo(info.get("descricao_ativos", "Ativos Legados"), info.get("outros_ativos", 0.0))
         
         ajustar_altura_scroll()
+        calcular_previsao_pmt()
 
         def atualizar_dict_objetivo():
             nonlocal nome_preenchido # 1. Garante que saibamos o nome antigo caso mude várias vezes
