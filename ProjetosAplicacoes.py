@@ -1390,6 +1390,20 @@ class AppInvest(ctk.CTk):
         # Aumentei a altura para 820 para acomodar os comentários
         janela = self.criar_janela_secundaria("Gerenciar Objetivo", 850, 820)
 
+        # Recupera o tamanho salvo da janela, se houver
+        tamanho_salvo = self.dados.get("config_janelas", {}).get("objetivo")
+        if tamanho_salvo:
+            janela.geometry(tamanho_salvo)
+
+        def on_close_objetivo():
+            if "config_janelas" not in self.dados:
+                self.dados["config_janelas"] = {}
+            self.dados["config_janelas"]["objetivo"] = f"{janela.winfo_width()}x{janela.winfo_height()}"
+            self.salvar_dados()
+            janela.destroy()
+
+        janela.protocol("WM_DELETE_WINDOW", on_close_objetivo)
+
         # Adiciona barra de rolagem vertical na janela toda
         main_scroll = ctk.CTkScrollableFrame(janela, fg_color="transparent")
         main_scroll.pack(fill="both", expand=True)
@@ -1511,13 +1525,6 @@ class AppInvest(ctk.CTk):
             linhas = max(1, len(linhas_ativos_ui))
             nova_altura_scroll = min(150, linhas * 46)
             frame_wrapper_ativos.configure(height=nova_altura_scroll)
-            
-            # --- O PULO DO GATO: AUMENTAR A JANELA JUNTO ---
-            # Aumentamos a base de 730 para 800 por causa do campo de comentários
-            altura_base_janela = 800 
-            diferenca_crescimento = nova_altura_scroll - 46
-            nova_altura_janela = altura_base_janela + diferenca_crescimento
-            janela.geometry(f"850x{nova_altura_janela}")
 
         def adicionar_linha_ativo(desc="", valor=0.0):
             row_frame = ctk.CTkFrame(frame_ativos_scroll, fg_color="transparent")
@@ -1772,9 +1779,8 @@ class AppInvest(ctk.CTk):
         def salvar_tudo_e_fechar():
             try:
                 atualizar_dict_objetivo()
-                self.salvar_dados()
                 self.atualizar_tabelas_principais()
-                janela.destroy()
+                on_close_objetivo()
             except ValueError:
                 messagebox.showerror("Erro", "Campos financeiros devem ser números!", parent=janela)
 
@@ -1788,6 +1794,20 @@ class AppInvest(ctk.CTk):
     def abrir_janela_aplicacao(self, nome_preenchido=""):
         # 3. Aumentei a altura da janela para 700 para os botões não ficarem espremidos
         janela = self.criar_janela_secundaria("Gerenciar Aplicação", 750, 700)
+
+        # Recupera o tamanho salvo da janela, se houver
+        tamanho_salvo = self.dados.get("config_janelas", {}).get("aplicacao")
+        if tamanho_salvo:
+            janela.geometry(tamanho_salvo)
+
+        def on_close_aplicacao():
+            if "config_janelas" not in self.dados:
+                self.dados["config_janelas"] = {}
+            self.dados["config_janelas"]["aplicacao"] = f"{janela.winfo_width()}x{janela.winfo_height()}"
+            self.salvar_dados()
+            janela.destroy()
+
+        janela.protocol("WM_DELETE_WINDOW", on_close_aplicacao)
 
         # Adiciona barra de rolagem vertical na janela toda
         main_scroll = ctk.CTkScrollableFrame(janela, fg_color="transparent")
@@ -2050,7 +2070,7 @@ class AppInvest(ctk.CTk):
             # 2. Garante o renomear e o salvamento das infos mesmo sem movimentos
             nome = atualizar_nome_app()
             if not nome:
-                janela.destroy()
+                on_close_aplicacao()
                 return
 
             if nome not in self.dados["aplicacoes"]:
@@ -2064,9 +2084,8 @@ class AppInvest(ctk.CTk):
                 self.dados["aplicacoes"][nome]["tipo"] = combo_tipo_app.get()
                 self.dados["aplicacoes"][nome]["comentario"] = txt_comentario_app.get("1.0", "end-1c").strip()
                 
-            self.salvar_dados()
             self.atualizar_tabelas_principais()
-            janela.destroy()
+            on_close_aplicacao()
 
         ctk.CTkButton(frame_botoes, text="Salvar Informações e Fechar", command=fechar_e_salvar).pack(side="left", padx=10)
 
