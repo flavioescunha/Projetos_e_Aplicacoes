@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.5"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, implementamos a coluna de TIR na aba de Aplicações e a previsão automática da aplicação mensal (PMT) na edição de objetivos. |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
+VERSAO_ATUAL = "v1.1.6"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, adicionamos barras de rolagem nas janelas de objetivos e aplicações para resolver problemas de exibição em resoluções menores. |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1390,7 +1390,11 @@ class AppInvest(ctk.CTk):
         # Aumentei a altura para 820 para acomodar os comentários
         janela = self.criar_janela_secundaria("Gerenciar Objetivo", 850, 820)
 
-        frame_info = ctk.CTkFrame(janela)
+        # Adiciona barra de rolagem vertical na janela toda
+        main_scroll = ctk.CTkScrollableFrame(janela, fg_color="transparent")
+        main_scroll.pack(fill="both", expand=True)
+
+        frame_info = ctk.CTkFrame(main_scroll)
         frame_info.pack(padx=20, pady=10, fill="x")
         frame_info.grid_columnconfigure((0, 1), weight=1)
 
@@ -1620,7 +1624,7 @@ class AppInvest(ctk.CTk):
             return nome
 
         # --- FRAME DE MOVIMENTOS ---
-        frame_mov = ctk.CTkFrame(janela)
+        frame_mov = ctk.CTkFrame(main_scroll)
         frame_mov.pack(padx=20, pady=10, fill="x")
         for i in range(5): frame_mov.grid_columnconfigure(i, weight=1)
 
@@ -1691,7 +1695,7 @@ class AppInvest(ctk.CTk):
 
         # --- TABELA DE MOVIMENTOS ---
         colunas_mov = ("excluir", "data", "desc", "tipo", "valor", "valor_ativo", "montante")
-        tree_movs = ttk.Treeview(janela, columns=colunas_mov, show='headings', height=6)
+        tree_movs = ttk.Treeview(main_scroll, columns=colunas_mov, show='headings', height=6)
         tree_movs.heading("excluir", text="x")
         tree_movs.heading("data", text="Data")
         tree_movs.heading("desc", text="Descrição")
@@ -1774,7 +1778,7 @@ class AppInvest(ctk.CTk):
             except ValueError:
                 messagebox.showerror("Erro", "Campos financeiros devem ser números!", parent=janela)
 
-        frame_botoes_obj = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_botoes_obj = ctk.CTkFrame(main_scroll, fg_color="transparent")
         frame_botoes_obj.pack(pady=15)
 
         ctk.CTkButton(frame_botoes_obj, text="Salvar Informações e Fechar", command=salvar_tudo_e_fechar).pack(side="left", padx=10)
@@ -1785,7 +1789,11 @@ class AppInvest(ctk.CTk):
         # 3. Aumentei a altura da janela para 700 para os botões não ficarem espremidos
         janela = self.criar_janela_secundaria("Gerenciar Aplicação", 750, 700)
 
-        frame_dados_app = ctk.CTkFrame(janela, fg_color="transparent")
+        # Adiciona barra de rolagem vertical na janela toda
+        main_scroll = ctk.CTkScrollableFrame(janela, fg_color="transparent")
+        main_scroll.pack(fill="both", expand=True)
+
+        frame_dados_app = ctk.CTkFrame(main_scroll, fg_color="transparent")
         frame_dados_app.pack(pady=10, padx=20, fill="x")
         frame_dados_app.grid_columnconfigure((0,1), weight=1)
 
@@ -1842,7 +1850,7 @@ class AppInvest(ctk.CTk):
                 return self.dados["aplicacoes"][nome].get("saldo", 0.0)
             return 0.0
 
-        frame_mov = ctk.CTkFrame(janela)
+        frame_mov = ctk.CTkFrame(main_scroll)
         frame_mov.pack(padx=20, pady=10, fill="x")
         for i in range(5): frame_mov.grid_columnconfigure(i, weight=1)
 
@@ -1957,7 +1965,7 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_mov, text="Adicionar", fg_color="green", width=100, command=adicionar_movimento).grid(row=0, column=4, padx=5, pady=15)
 
-        tree_movs = ttk.Treeview(janela, columns=("excluir", "data", "tipo", "valor", "saldo"), show='headings', height=10)
+        tree_movs = ttk.Treeview(main_scroll, columns=("excluir", "data", "tipo", "valor", "saldo"), show='headings', height=10)
         tree_movs.heading("excluir", text="x")
         tree_movs.column("excluir", width=30, anchor="center", stretch=False)
         tree_movs.heading("data", text="Data")
@@ -1992,7 +2000,7 @@ class AppInvest(ctk.CTk):
 
         tree_movs.bind("<ButtonRelease-1>", on_click_excluir_mov_app)
 
-        frame_rodape = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_rodape = ctk.CTkFrame(main_scroll, fg_color="transparent")
         frame_rodape.pack(pady=(10, 0))
 
         lbl_saldo_rodape = ctk.CTkLabel(frame_rodape, text="Saldo Atual: R$ 0,00", font=("Roboto", 18, "bold"), text_color="#2FA572")
@@ -2035,7 +2043,7 @@ class AppInvest(ctk.CTk):
         recarregar_tabela_movimentos()
         if hasattr(self, 'ajustar_larguras_tabela'): self.ajustar_larguras_tabela(tree_movs)
 
-        frame_botoes = ctk.CTkFrame(janela, fg_color="transparent")
+        frame_botoes = ctk.CTkFrame(main_scroll, fg_color="transparent")
         frame_botoes.pack(pady=15)
 
         def fechar_e_salvar():
