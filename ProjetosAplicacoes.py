@@ -2358,52 +2358,60 @@ class AppInvest(ctk.CTk):
             distribuicao = {cat: 0.0 for cat in carteira_digitada.keys()}
             restante = valor_aporte
 
-            # Proteção contra loop infinito
-            for _ in range(1000):
-                if restante <= 0.009:
-                    break
-
-                categorias_defasadas = []
-
+            soma_pcts = sum(pct for pct in carteira_digitada.values() if pct > 0)
+            
+            if saldo_total_simulado <= 0 and soma_pcts > 0:
                 for cat, pct_ideal in carteira_digitada.items():
-                    if pct_ideal <= 0:
-                        continue
-
-                    saldo_cat = saldos_simulados.get(cat, 0.0)
-                    pct_atual = 0.0 if saldo_total_simulado <= 0 else (saldo_cat / saldo_total_simulado) * 100.0
-
-                    # Distância relativa:
-                    # negativo = abaixo do ideal
-                    # zero = no ideal
-                    # positivo = acima do ideal
-                    indice_relativo = (pct_atual - pct_ideal) / pct_ideal
-
-                    # Só considera quem está abaixo do ideal
-                    if indice_relativo < -0.000001:
-                        categorias_defasadas.append((cat, indice_relativo, pct_ideal, saldo_cat))
-
-                if not categorias_defasadas:
-                    break
-
-                # Menor índice = categoria mais distante do ideal relativamente
-                categorias_defasadas.sort(key=lambda x: x[1])
-                cat_escolhida, _, pct_ideal, saldo_cat = categorias_defasadas[0]
-
-                valor_necessario = calcular_valor_para_atingir_ideal(
-                    saldo_categoria=saldo_cat,
-                    saldo_total=saldo_total_simulado,
-                    percentual_ideal=pct_ideal
-                )
-
-                if valor_necessario <= 0.000001:
-                    break
-
-                aporte_categoria = min(valor_necessario, restante)
-
-                distribuicao[cat_escolhida] += aporte_categoria
-                saldos_simulados[cat_escolhida] += aporte_categoria
-                saldo_total_simulado += aporte_categoria
-                restante -= aporte_categoria
+                    if pct_ideal > 0:
+                        distribuicao[cat] = valor_aporte * (pct_ideal / soma_pcts)
+                restante = 0.0
+            else:
+                # Proteção contra loop infinito
+                for _ in range(1000):
+                    if restante <= 0.009:
+                        break
+    
+                    categorias_defasadas = []
+    
+                    for cat, pct_ideal in carteira_digitada.items():
+                        if pct_ideal <= 0:
+                            continue
+    
+                        saldo_cat = saldos_simulados.get(cat, 0.0)
+                        pct_atual = 0.0 if saldo_total_simulado <= 0 else (saldo_cat / saldo_total_simulado) * 100.0
+    
+                        # Distância relativa:
+                        # negativo = abaixo do ideal
+                        # zero = no ideal
+                        # positivo = acima do ideal
+                        indice_relativo = (pct_atual - pct_ideal) / pct_ideal
+    
+                        # Só considera quem está abaixo do ideal
+                        if indice_relativo < -0.000001:
+                            categorias_defasadas.append((cat, indice_relativo, pct_ideal, saldo_cat))
+    
+                    if not categorias_defasadas:
+                        break
+    
+                    # Menor índice = categoria mais distante do ideal relativamente
+                    categorias_defasadas.sort(key=lambda x: x[1])
+                    cat_escolhida, _, pct_ideal, saldo_cat = categorias_defasadas[0]
+    
+                    valor_necessario = calcular_valor_para_atingir_ideal(
+                        saldo_categoria=saldo_cat,
+                        saldo_total=saldo_total_simulado,
+                        percentual_ideal=pct_ideal
+                    )
+    
+                    if valor_necessario <= 0.000001:
+                        break
+    
+                    aporte_categoria = min(valor_necessario, restante)
+    
+                    distribuicao[cat_escolhida] += aporte_categoria
+                    saldos_simulados[cat_escolhida] += aporte_categoria
+                    saldo_total_simulado += aporte_categoria
+                    restante -= aporte_categoria
 
             # Atualiza a UI
             for dados_linha in entradas.values():
