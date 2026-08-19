@@ -1295,6 +1295,50 @@ class AppInvest(ctk.CTk):
         
         janela.geometry(f"{int(w)}x{int(h)}+{int(pos_x)}+{int(pos_y)}")
 
+    def ajustar_tamanho_janela_scroll(self, janela, scrollable_frame, tamanho_salvo=None, min_w=None, min_h=None):
+        janela.update_idletasks()
+        
+        try:
+            req_h = scrollable_frame._parent_canvas.bbox("all")[3]
+        except Exception:
+            req_h = sum(c.winfo_reqheight() for c in scrollable_frame.winfo_children())
+            
+        req_h += 40 
+
+        w = janela.winfo_reqwidth()
+        if min_w and w < min_w: w = min_w
+        
+        h = req_h
+        if min_h and h < min_h: h = min_h
+
+        if tamanho_salvo:
+            try:
+                parts = tamanho_salvo.split("x")
+                saved_w = int(parts[0])
+                saved_h = int(parts[1])
+                w = max(w, saved_w)
+                h = max(saved_h, h)
+            except:
+                pass
+
+        screen_w = janela.winfo_screenwidth()
+        screen_h = janela.winfo_screenheight()
+        if w > screen_w - 50: w = screen_w - 50
+        if h > screen_h - 80: h = screen_h - 80
+
+        x_pai = self.winfo_rootx()
+        y_pai = self.winfo_rooty()
+        larg_pai = self.winfo_width()
+        alt_pai = self.winfo_height()
+
+        pos_x = x_pai + (larg_pai // 2) - (w // 2)
+        pos_y = y_pai + (alt_pai // 2) - (h // 2)
+
+        if pos_y < 30: pos_y = 30
+        if pos_x < 0: pos_x = 0
+
+        janela.geometry(f"{int(w)}x{int(h)}+{int(pos_x)}+{int(pos_y)}")
+
     def abrir_janela_extrato(self, tipo="objetivos"):
         janela = self.criar_janela_secundaria(f"Extrato de {'Aportes (Objetivos)' if tipo == 'objetivos' else 'Aplicações'}", 800, 500)
         
@@ -1789,7 +1833,7 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_botoes_obj, text="Salvar Informações e Fechar", command=salvar_tudo_e_fechar).pack(side="left", padx=10)
 
-        self.ajustar_tamanho_janela_conteudo(janela, min_w=850)
+        self.ajustar_tamanho_janela_scroll(janela, main_scroll, tamanho_salvo, min_w=850)
             
     def abrir_janela_aplicacao(self, nome_preenchido=""):
         # 3. Aumentei a altura da janela para 700 para os botões não ficarem espremidos
@@ -2089,7 +2133,7 @@ class AppInvest(ctk.CTk):
 
         ctk.CTkButton(frame_botoes, text="Salvar Informações e Fechar", command=fechar_e_salvar).pack(side="left", padx=10)
 
-        self.ajustar_tamanho_janela_conteudo(janela, min_w=750)
+        self.ajustar_tamanho_janela_scroll(janela, main_scroll, tamanho_salvo, min_w=750)
 
 
     def on_double_click_app(self, event):
