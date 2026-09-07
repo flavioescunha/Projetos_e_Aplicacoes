@@ -14,7 +14,7 @@ import threading
 
 
 
-VERSAO_ATUAL = "v1.1.6"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, adicionamos barras de rolagem nas janelas de objetivos e aplicações para resolver problemas de exibição em resoluções menores. |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
+VERSAO_ATUAL = "v1.1.7"  # # 🚀 Novidades na Atualização - Gerenciador de Investimentos |  | Nesta versão, implementamos a memória persistente para as dimensões das janelas de objetivo e aplicações! |  | --- | *Mantenha sempre seu aplicativo atualizado para aproveitar a melhor experiência no acompanhamento de seus sonhos e investimentos!*
 USUARIO_REPO = "flavioescunha/Projetos_e_Aplicacoes"
 
 ctk.set_appearance_mode("System")
@@ -1316,8 +1316,8 @@ class AppInvest(ctk.CTk):
                 parts = tamanho_salvo.split("x")
                 saved_w = int(parts[0])
                 saved_h = int(parts[1])
-                w = max(w, saved_w)
-                h = max(saved_h, h)
+                w = max(min_w or 0, saved_w)
+                h = max(min_h or 0, saved_h)
             except:
                 pass
 
